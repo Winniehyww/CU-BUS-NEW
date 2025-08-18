@@ -1,0 +1,4141 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Campus Bus — Map & Timetable</title>
+    <!-- Leaflet -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <style>
+      :root {
+        --bg: #0b0c10;
+        --card: #111319;
+        --fg: #e9edf1;
+        --muted: #9aa4b2;
+        --accent: #4f46e5;
+        --pill: #1f2937;
+        --success: #10b981;
+        --danger: #ef4444;
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        --pin-fill: #fff;
+        --pin-stroke: #111;
+        --pin-selected: #b0b7c3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans',
+          'PingFang TC', 'Microsoft JhengHei', Arial, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+
+      #app {
+        position: fixed;
+        inset: 0;
+        display: grid;
+      }
+      #map {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+      }
+
+      .topbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 8px 10px;
+        display: grid;
+        grid-template-columns: 360px 260px 1fr;
+        gap: 8px;
+        z-index: 1000;
+        pointer-events: none;
+        align-items: start;
+      }
+      .topbar > * {
+        pointer-events: auto;
+      }
+
+      .card {
+        background: rgba(17, 19, 25, 0.82);
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+      }
+      .card.pad {
+        padding: 10px 12px;
+      }
+
+      /* Selected stop + upcoming */
+      .upcoming {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 6px;
+      }
+      .stop-title {
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .stop-subtitle {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .up-when {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .up-when input {
+        height: 32px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #0f1220;
+        color: var(--fg);
+        padding: 0 8px;
+      }
+      .upcoming-list {
+        display: grid;
+        gap: 6px;
+        max-height: 120px;
+        overflow: auto;
+      }
+
+      .up-item {
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #0f1220;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 6px 8px;
+        border-radius: 10px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1px 6px;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        font-weight: 800;
+        font-size: 10px;
+        color: #fff;
+      }
+      .time {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+
+      /* Search */
+      .search {
+        display: flex;
+        grid-template-columns: 1fr;
+        position: relative;
+        align-self: start;
+        align-items: center;
+        gap: 6px;
+      }
+      .search input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        outline: none;
+        color: var(--fg);
+        background: var(--card);
+        height: 40px;
+        font-size: 12px;
+      }
+      .search-results {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        max-height: 320px;
+        overflow: auto;
+        box-shadow: var(--shadow);
+        display: none;
+        z-index: 1002;
+      }
+      .search-results.active {
+        display: block;
+      }
+      .sr-item {
+        padding: 10px 12px;
+        cursor: pointer;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 8px;
+      }
+      .sr-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .sr-muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      /* Planner button */
+      .planner-wrap {
+        display: flex;
+        justify-content: end;
+        align-self: start;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: var(--card);
+        color: var(--fg);
+        cursor: pointer;
+        font-weight: 700;
+        height: 44px;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1001;
+      }
+      .modal.active {
+        display: flex;
+      }
+      .modal .panel {
+        width: min(720px, 96vw);
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .panel input,
+      .panel select {
+        width: 100%;
+        padding: 12px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        outline: none;
+        color: var(--fg);
+        background: #0f1220;
+      }
+      .panel .actions {
+        display: flex;
+        gap: 10px;
+        justify-content: end;
+      }
+
+      /* Bottom route drawer */
+      .bottom-drawer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 10px;
+        margin: 0 auto;
+        width: min(980px, 96vw);
+        background: rgba(17, 19, 25, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        z-index: 999;
+      }
+      /* Full overlay when itinerary view is expanded */
+      .bottom-drawer.overlay {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        border-radius: 0;
+        background: var(--card); /* fully opaque */
+        backdrop-filter: none;
+        border: none;
+        z-index: 3000; /* above topbar, map, modal */
+      }
+
+      /* Make overlay content scroll nicely if long */
+      .bottom-drawer.overlay .drawer-content {
+        max-height: calc(100vh - 80px);
+        overflow: auto;
+      }
+
+      .bottom-drawer.overlay .itins {
+        max-height: none;
+      }
+
+      /* Ensure buttons sit at the top-right consistently */
+      .drawer-head .icon-btn {
+        margin-left: 6px;
+      }
+      .drawer-head .icon-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+      }
+      .drawer-head .icon-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .drawer-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .drawer-head .grow {
+        margin-left: auto;
+      }
+      .drawer-content {
+        padding: 10px 12px;
+      }
+
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--fg);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        cursor: pointer;
+      }
+
+      .walk-icon {
+        color: #374151;
+      }
+
+      .itins {
+        gap: 6px;
+      }
+      .itin-card {
+        position: relative; /* needed for ::after ring */
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        background: #0f1220;
+        padding: 10px 12px;
+        cursor: pointer;
+        background-clip: padding-box;
+      }
+      .itin-title {
+        font-size: 13px;
+      }
+      .itin-sub {
+        font-size: 11px;
+      }
+      .itin-card .pill {
+        transform: scale(0.9);
+      }
+
+      /* selected state: use box-shadow (not outline) so it isn't clipped */
+      .itin-card.selected {
+        border-color: transparent; /* hide the base border */
+        outline: none; /* ensure no outline shows */
+      }
+      .itin-card.selected::after {
+        content: '';
+        position: absolute;
+        inset: -2px; /* slightly outside the box */
+        border-radius: inherit;
+        pointer-events: none;
+      }
+      .itin-card .itin-details {
+        margin-top: 6px;
+      }
+      .itin-card .itin-details .summary {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .itin-card .itin-details .detail {
+        font-size: 11px;
+        margin-top: 4px;
+      }
+
+      .itin-card.selected {
+        border: 3px solid var(--accent) !important;
+        outline: none !important;
+        box-shadow: none !important; /* 取代舊的光暈做法 */
+      }
+
+      /* Dark mode: button is white with sun icon (indicates switch to day) */
+      :root:not([data-theme='light']) #themeToggle {
+        background: #ffffff;
+        color: #0b0c10;
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+      /* Walking icon and any monochrome svg inside dark theme tools/cards */
+      :root:not([data-theme='light']) .walk-icon,
+      :root:not([data-theme='light']) .itin-card .itin-sub svg,
+      :root:not([data-theme='light']) .tool-btn svg {
+        color: #ffffff; /* makes stroke = white in dark */
+      }
+
+      /* Keep light theme greys as-is */
+      :root[data-theme='light'] .walk-icon {
+        color: #374151;
+      }
+
+      /* Light mode: button is black with moon icon (indicates switch to dark) */
+      :root[data-theme='light'] #themeToggle {
+        background: #0b0c10;
+        color: #ffffff;
+        border-color: rgba(0, 0, 0, 0.3);
+      }
+
+      .icon-btn svg {
+        transition: transform 0.18s ease;
+      }
+
+      /* Leaflet marker with route badges */
+
+      .stop-marker {
+        position: relative;
+        display: block;
+        width: 56px;
+        height: 64px;
+        cursor: pointer;
+        transform-origin: 50% 100%;
+        transition: transform 0.18s ease;
+      }
+
+      .pin-svg {
+        position: absolute;
+        left: 50%;
+        bottom: 0; /* triangle tip at the box bottom */
+        transform: translateX(-50%);
+        width: 56px;
+        height: 64px;
+      }
+      .pin-fill {
+        fill: var(--pin-fill);
+        stroke: var(--pin-stroke);
+        stroke-width: 2;
+        stroke-linejoin: round;
+        transition: fill 0.18s ease;
+      }
+
+      .stop-pin {
+        position: absolute;
+        left: 50%;
+        bottom: 12px;
+        transform: translateX(-50%);
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--pin-fill);
+        border: 2px solid var(--pin-stroke);
+        box-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+        transition: transform 0.18s ease, background-color 0.18s ease,
+          border-color 0.18s ease;
+      }
+
+      /* Triangle BORDER (slightly larger) */
+      .stop-pin::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: -13px;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent; /* 1px wider than fill triangle */
+        border-right: 10px solid transparent;
+        border-top: 12px solid var(--pin-stroke); /* black outline */
+      }
+
+      /* Triangle FILL (slightly smaller) — leaves a visible black border */
+      .stop-pin::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        /* 2px gap between circle and triangle: 10px high triangle placed -12px */
+        bottom: -12px;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 10px solid var(--pin-fill); /* inside color */
+      }
+
+      /* Selected state: grow a bit and fill turns light gray, border stays black */
+      .stop-marker {
+        transition: transform 0.18s ease;
+      }
+      .stop-marker.selected {
+        transform: scale(1.18);
+      }
+      .stop-marker.selected .pin-fill {
+        fill: var(--pin-selected);
+      }
+
+      .stop-marker.selected .stop-pin {
+        background: #e5e7eb; /* gray fill when selected */
+        border-color: var(--pin-stroke); /* keep black border */
+      }
+      .stop-marker.selected .stop-pin::after {
+        border-top-color: #e5e7eb; /* triangle fill matches gray */
+      }
+      .stop-marker.selected .stop-pin::before {
+        border-top-color: var(--pin-stroke); /* keep black outline */
+      }
+
+      .badge-row {
+        position: absolute;
+        left: 50%;
+        top: 68px;
+        bottom: -28px; /* ⬅️ put below the triangle tip */
+        transform: translateX(-50%);
+        display: grid;
+        grid-auto-flow: column; /* column-major fill: r1c1, r2c1, r1c2, ... */
+        grid-template-rows: repeat(2, auto);
+        gap: 2px 4px;
+        align-items: center;
+        justify-items: center;
+        pointer-events: none; /* clicking still selects the stop */
+      }
+
+      /* Upcoming direction line: no-wrap + ellipsis */
+      .route-dir {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .route-dir .dir {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Route description card (smaller) */
+      .route-desc {
+        padding: 10px 12px;
+        background: #0f1220;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        margin-bottom: 8px;
+        line-height: 1.4;
+        font-size: 12px;
+      }
+
+      /* Vertical numbered stop list (smaller, 3 rows visible) */
+      .route-list {
+        position: relative;
+        display: grid;
+        gap: 6px;
+        padding-left: 28px;
+        --row-h: 48px;
+        max-height: calc(var(--row-h) * 3 + 12px);
+        overflow: auto;
+      }
+      .route-row::before {
+        content: '';
+        position: absolute;
+        left: -16px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--accent);
+        opacity: 0.6;
+      }
+      .route-row {
+        position: relative;
+        background: #0f1220;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 8px 10px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0;
+        min-height: var(--row-h);
+        cursor: pointer;
+      }
+
+      .route-row.current-stop {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+      :root[data-theme='light'] .route-row.current-stop {
+        background: #eef2ff;
+        border-color: rgba(0, 0, 0, 0.2);
+      }
+
+      .up-item.current-stop {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+      :root[data-theme='light'] .up-item.current-stop {
+        background: #eef2ff;
+        border-color: rgba(0, 0, 0, 0.2);
+      }
+
+      .route-row:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .route-row .no {
+        position: absolute;
+        left: -22px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #e5e7eb;
+        color: #111;
+        border: 2px solid var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 10px;
+        z-index: 1;
+      }
+      .route-row .name {
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .route-row .sub {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* Collapse behaviour */
+      .drawer-collapsed .route-list {
+        display: none;
+      } /* itinerary view remains visible */
+
+      /* Itinerary (now inside drawer) */
+      .itins {
+        display: grid;
+        gap: 8px;
+        max-height: 240px;
+        overflow: auto;
+      }
+      .itin-card {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        background: #0f1220;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+      .itin-card:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .itin-title {
+        font-weight: 800;
+      }
+      .itin-sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .itin-warn {
+        font-size: 12px;
+        color: var(--danger);
+        margin-top: 2px;
+      }
+      .itin-steps .step {
+        background: #0f1220;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 8px 10px;
+        margin-top: 6px;
+      }
+      .itin-head {
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      :root[data-theme='light'] .itin-head {
+        border-bottom-color: rgba(0, 0, 0, 0.08);
+      }
+      .itin-details {
+        margin-top: 8px;
+      }
+
+      #drawerRoutePill.icon-mode {
+        background: transparent !important;
+        border: 0 !important;
+        color: var(--fg) !important; /* overrides .pill { color:#fff } */
+        padding: 0 2px; /* keep height tidy */
+      }
+      #drawerRoutePill.icon-mode svg {
+        display: block; /* avoid inline baseline gap */
+      }
+
+      /* When collapsed in itinerary mode: show only the first card; allow scroll */
+      .drawer-collapsed #drawerItinSteps {
+        display: none;
+      }
+      .drawer-collapsed #drawerItinList {
+        max-height: 96px;
+        overflow: auto;
+      }
+
+      /* Day theme overrides */
+      :root[data-theme='light'] {
+        --bg: #f7f8fb;
+        --card: #ffffff;
+        --fg: #0b0c10;
+        --muted: #4b5563;
+        --accent: #2563eb;
+        --pill: #e5e7eb;
+        --success: #059669;
+        --danger: #dc2626;
+      }
+      :root[data-theme='light'] .card {
+        background: rgba(255, 255, 255, 0.75);
+      }
+      :root[data-theme='light'] .up-item,
+      :root[data-theme='light'] .route-row,
+      :root[data-theme='light'] .route-desc,
+      :root[data-theme='light'] .itin-card {
+        background: #fff;
+        border-color: rgba(0, 0, 0, 0.1);
+      }
+      :root[data-theme='light'] .itin-steps .step {
+        background: #ffffff;
+      }
+      :root[data-theme='light'] .panel input,
+      :root[data-theme='light'] .panel select,
+      :root[data-theme='light'] .search input,
+      :root[data-theme='light'] .up-when input {
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--fg);
+        border-color: rgba(0, 0, 0, 0.12);
+      }
+      :root[data-theme='light'] .bottom-drawer {
+        background: rgba(255, 255, 255, 0.95);
+        border-color: rgba(0, 0, 0, 0);
+      }
+      :root[data-theme='light'] .drawer-head {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      }
+      :root[data-theme='light'] .icon-btn {
+        background: var(--card);
+        color: var(--fg);
+        border-color: rgba(0, 0, 0, 0.12);
+      }
+      :root[data-theme='dark'] .leaflet-popup-content-wrapper {
+        background: rgba(46, 49, 56, 0.98); /* grey background */
+        color: #eee; /* lighter text for readability */
+      }
+      :root[data-theme='dark'] .leaflet-popup-tip {
+        background: rgba(46, 49, 56, 0.98);
+      }
+
+      @media (max-width: 960px) {
+        .topbar {
+          grid-template-columns: 1fr;
+          gap: 6px;
+          padding: 6px;
+        }
+        .upcoming {
+          order: 2;
+        }
+        .planner-wrap {
+          order: 3;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="map"></div>
+
+      <!-- Top Bar -->
+      <div class="topbar">
+        <!-- Selected Stop + Upcoming -->
+        <div class="card pad upcoming" id="upcomingCard">
+          <div>
+            <div class="stop-title">
+              <span id="selStopName">未選擇站點</span>
+            </div>
+            <div class="stop-subtitle" id="selStopSub">—</div>
+          </div>
+
+          <!-- NEW: Date+Time control for upcoming preview -->
+          <div class="up-when">
+            <label for="nowControl" class="sr-muted" style="font-size: 12px"
+              >查詢時間</label
+            >
+            <input id="nowControl" type="datetime-local" />
+            <button
+              class="icon-btn tool-btn"
+              id="timeModeBtn"
+              title="切換顯示（時刻 / 倒數）"
+              style="margin-left: auto; margin-right: 15px; height: 33px"
+            >
+              <span id="timeModeLabel" style="font-weight: 800; font-size: 12px"
+                >hh:mm</span
+              >
+            </button>
+          </div>
+
+          <div class="upcoming-list" id="upcomingList">
+            <div class="sr-muted">請在地圖點選站點</div>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="search">
+          <input
+            id="searchInput"
+            placeholder="搜尋站點或路線… (e.g. 1, 2, 3, 或 逸夫書院)"
+          />
+          <button
+            class="icon-btn tool-btn"
+            id="locateBtn"
+            title="定位到我的位置"
+            style="margin-left: 6px; height: 40px; width: 44px"
+          >
+            <!-- 定位图标 -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="12"
+                cy="12"
+                r="8"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <line
+                x1="12"
+                y1="2"
+                x2="12"
+                y2="6"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <line
+                x1="12"
+                y1="18"
+                x2="12"
+                y2="22"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <line
+                x1="2"
+                y1="12"
+                x2="6"
+                y2="12"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <line
+                x1="18"
+                y1="12"
+                x2="22"
+                y2="12"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+          <div class="search-results" id="searchResults"></div>
+        </div>
+
+        <!-- Journey Planner button -->
+        <div class="planner-wrap">
+          <button class="icon-btn tool-btn" id="openPlanner" title="規劃行程">
+            <!-- route / path icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M6.14214 6.14214C8.90356 3.38071 10.2843 2 12 2C13.7157 2 15.0964 3.38071 17.8579 6.14214C20.6193 8.90356 22 10.2843 22 12C22 13.7157 20.6193 15.0964 17.8579 17.8579C15.0964 20.6193 13.7157 22 12 22C10.2843 22 8.90356 20.6193 6.14214 17.8579C3.38071 15.0964 2 13.7157 2 12C2 10.2843 3.38071 8.90356 6.14214 6.14214Z"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <path
+                d="M16 11.5L13.3333 9M16 11.5L13.3333 14M16 11.5L10.6667 11.5C9.77778 11.5 8 12 8 14"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            class="icon-btn tool-btn"
+            id="toggleInactiveBadges"
+            title="隱藏未營運路線徽章"
+            style="margin-left: 8px"
+          >
+            <!-- eye (SHOW) -->
+            <svg
+              id="eyeOn"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="display: none"
+            >
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <!-- eye-off (HIDE) -->
+            <svg
+              id="eyeOff"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.11 1 12a21.82 21.82 0 0 1 5.06-7.36"
+              ></path>
+              <path d="M10.58 10.58a2 2 0 1 0 2.83 2.83"></path>
+              <path d="M1 1l22 22"></path>
+            </svg>
+          </button>
+
+          <button
+            class="icon-btn tool-btn"
+            id="themeToggle"
+            title="切換主題"
+            style="margin-left: 8px"
+          >
+            <!-- moon (default dark) -->
+            <svg
+              id="iconMoon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <!-- sun (hidden initially) -->
+            <svg
+              id="iconSun"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#000000"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="display: none"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Planner Modal -->
+      <div class="modal" id="plannerModal">
+        <div class="panel">
+          <h3 style="margin: 0 0 12px 0">行程規劃</h3>
+          <div class="row">
+            <div>
+              <label>起點</label>
+              <input id="startInput" placeholder="選擇或搜尋起點站" />
+            </div>
+            <div>
+              <label>終點</label>
+              <input id="endInput" placeholder="選擇或搜尋終點站" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>出發日期與時間</label>
+              <input id="departDT" type="datetime-local" />
+            </div>
+          </div>
+          <div
+            id="planResult"
+            class="sr-muted"
+            style="margin-bottom: 10px"
+          ></div>
+          <div class="actions">
+            <button class="btn" id="closePlanner">關閉</button>
+            <button
+              class="btn"
+              id="planBtn"
+              style="
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #fff;
+              "
+            >
+              開始規劃
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Drawer -->
+      <div
+        class="bottom-drawer drawer-collapsed"
+        id="routeDrawer"
+        style="display: none"
+      >
+        <div class="drawer-head">
+          <!-- Back to route view (visible only in planning/itinerary mode) -->
+          <button
+            class="icon-btn"
+            id="backBtn"
+            title="返回路線"
+            style="display: none"
+          >
+            <!-- arrow-left icon -->
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <span class="pill" id="drawerRoutePill">—</span>
+          <div id="drawerTitle" style="font-weight: 700">未選擇路線</div>
+          <div class="grow"></div>
+          <!-- when collapsed: show expand + hide; when expanded: show collapse -->
+          <button
+            class="icon-btn"
+            id="expandBtn"
+            title="展開"
+            style="display: none"
+          >
+            <!-- chevron-up -->
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+          </button>
+
+          <button
+            class="icon-btn"
+            id="collapseBtn"
+            title="收合"
+            style="display: none"
+          >
+            <!-- chevron-down -->
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <button
+            class="icon-btn"
+            id="hideDrawerBtn"
+            title="隱藏"
+            style="display: none"
+          >
+            <!-- X -->
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="drawer-content">
+          <!-- Route view -->
+          <div id="routeView">
+            <div id="drawerDesc" class="route-desc"></div>
+            <div class="route-list" id="drawerRouteList"></div>
+          </div>
+          <!-- Itinerary view (replaces route view after planning) -->
+          <div id="itinView" style="display: none">
+            <div
+              id="itinSummary"
+              class="itin-head"
+              style="display: none; margin-bottom: 8px"
+            ></div>
+            <div id="drawerItinList" class="itins"></div>
+            <div
+              id="drawerItinSteps"
+              class="itin-steps"
+              style="margin-top: 10px"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const locateBtn = document.getElementById('locateBtn');
+      const defaultlat = 22.416553;
+      const defaultlng = 114.209383;
+      let userLocationMarker = null;
+
+      function showNotice(msg) {
+        alert(msg);
+      }
+
+      function getNearestStop(lat, lng) {
+        let minDist = Infinity,
+          nearest = null;
+        for (const stop of STOPS) {
+          const dLat = stop.lat - lat;
+          const dLng = stop.lng - lng;
+          const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = stop;
+          }
+        }
+        return nearest;
+      }
+
+      if (locateBtn) {
+        locateBtn.onclick = () => {
+          if (!navigator.geolocation) {
+            showNotice('無法取得定位：瀏覽器不支援定位功能');
+            return;
+          }
+          locateBtn.disabled = true;
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              locateBtn.disabled = false;
+              const { latitude, longitude } = pos.coords;
+              // 在地图上显示用户位置
+              if (userLocationMarker) {
+                map.removeLayer(userLocationMarker);
+              }
+              userLocationMarker = L.marker([latitude, longitude], {
+                icon: L.divIcon({
+                  html: `<div style="width:16px;height:16px;border-radius:50%;background:#2563eb;border:2px solid #fff;box-shadow:0 0 8px #2563eb;"></div>`,
+                  className: '',
+                  iconSize: [24, 24],
+                  iconAnchor: [12, 12],
+                }),
+              }).addTo(map);
+              map.setView([latitude, longitude], 17);
+
+              // 自动选择最近站点
+              const nearest = getNearestStop(latitude, longitude);
+              if (nearest) {
+                selectStop(nearest.id);
+              }
+            },
+            (err) => {
+              locateBtn.disabled = false;
+              map.removeLayer(userLocationMarker);
+              showNotice('定位失敗，請確認已允許瀏覽器取得位置');
+              // map.setView([defaultlat, defaultlng], 16);
+              // selectStop('T1');
+            }
+          );
+        };
+      }
+
+      // ========= 1) Data =========
+      const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const WORK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const SUN_DAY = ['Sun'];
+      const T1_2526_S = '2025-08-31';
+      const T1_2526_E = '2025-11-30';
+      const T2_2526_S = '2026-01-04';
+      const T2_2526_E = '2026-04-19';
+      const T1_2627_S = '2026-09-06';
+      const T1_2627_E = '2026-12-06';
+      const T2_2627_S = '2027-01-10';
+      const T2_2627_E = '2027-04-25';
+
+      const PUBLIC_HOLIDAYS = [
+        '2025-10-01',
+        '2025-10-07',
+        '2025-10-29',
+        '2025-12-25',
+        '2025-12-26',
+        '2026-01-01',
+        '2026-02-17',
+        '2026-02-18',
+        '2026-02-19',
+        '2026-04-03',
+        '2026-04-04',
+        '2026-04-06',
+        '2026-04-07',
+        '2026-05-01',
+        '2026-05-25',
+        '2026-06-19',
+        '2026-07-01',
+        '2026-09-26',
+        '2026-10-01',
+        '2026-10-19',
+        '2026-12-25',
+        '2026-12-26',
+      ];
+
+      // === Academic / Holiday flags (EDIT these as needed) ===
+      function isTeachingDay(date) {
+        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const start2526t1 = new Date(T1_2526_S);
+        const end2526t1 = new Date(T1_2526_E);
+        const start2526t2 = new Date(T2_2526_S);
+        const end2526t2 = new Date(T2_2526_E);
+        const start2627t1 = new Date(T1_2627_S);
+        const end2627t1 = new Date(T1_2627_E);
+        const start2627t2 = new Date(T2_2627_S);
+        const end2627t2 = new Date(T2_2627_E);
+        return (
+          (d >= start2526t1 && d <= end2526t1) ||
+          (d >= start2526t2 && d <= end2526t2) ||
+          (d >= start2627t1 && d <= end2627t1) ||
+          (d >= start2627t2 && d <= end2627t2)
+        );
+      }
+
+      function isPublicHoliday(date) {
+        const ymd = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        return PUBLIC_HOLIDAYS.includes(ymd);
+      }
+
+      function updateDayFlagsByDate(date) {
+        IS_TEACHING_DAY = isTeachingDay(date);
+        IS_NON_TEACHING_DAY = !IS_TEACHING_DAY;
+        IS_PUBLIC_HOLIDAY = isPublicHoliday(date);
+      }
+
+      let IS_PUBLIC_HOLIDAY = false; // true = today is a public holiday
+      let IS_TEACHING_DAY = true; // true = teaching day
+      let IS_NON_TEACHING_DAY = !IS_TEACHING_DAY;
+
+      // Optional helper so you can toggle in one call
+      function setDayFlags({
+        publicHoliday = IS_PUBLIC_HOLIDAY,
+        teachingDay = IS_TEACHING_DAY,
+      } = {}) {
+        IS_PUBLIC_HOLIDAY = !!publicHoliday;
+        IS_TEACHING_DAY = !!teachingDay;
+        IS_NON_TEACHING_DAY = !IS_TEACHING_DAY;
+        updateUpcoming(); // refresh the upcoming panel if a stop is selected
+      }
+
+      const STOPS = [
+        {
+          id: 'T1',
+          name: {
+            zh_hant: '大學站',
+            en: 'University Station',
+            zh_hans: '大学站',
+          },
+          lat: 22.414522,
+          lng: 114.210222,
+          routes: ['1A', '1B', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'T2',
+          name: {
+            zh_hant: '大學站廣場',
+            en: 'Station Piazza',
+            zh_hans: '大学站广场',
+          },
+          lat: 22.413801,
+          lng: 114.209436,
+          routes: ['2', '2*', '6A', '6B', '7', '8*'],
+        },
+        {
+          id: 'T3',
+          name: {
+            zh_hant: '康本園',
+            en: 'YIAP',
+            zh_hans: '康本园',
+          },
+          lat: 22.415975,
+          lng: 114.210815,
+          routes: ['3', '4'],
+        },
+        {
+          id: 'U1',
+          name: {
+            zh_hant: '大學體育中心',
+            en: 'Univ. Sports Centre',
+            zh_hans: '大学体育中心',
+          },
+          lat: 22.417773,
+          lng: 114.210595,
+          routes: ['1A', '1B', '2', '2*', '3', '5', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'U2',
+          name: {
+            zh_hant: '邵逸夫堂',
+            en: 'Sir Run Run Shaw Hall',
+            zh_hans: '邵逸夫堂',
+          },
+          lat: 22.419833,
+          lng: 114.206942,
+          routes: ['1A', '1B', '2*', '5', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'U3',
+          name: {
+            zh_hant: '科學館',
+            en: 'Science Centre',
+            zh_hans: '科学馆',
+          },
+          lat: 22.419816,
+          lng: 114.207341,
+          routes: ['3', '8', '8*'],
+        },
+        {
+          id: 'U4',
+          name: {
+            zh_hant: '馮景禧樓',
+            en: 'Fung King Hey Bldg.',
+            zh_hans: '冯景禧楼',
+          },
+          lat: 22.419851,
+          lng: 114.203031,
+          routes: ['2', '2*', '3', '5'],
+        },
+        {
+          id: 'U5',
+          name: {
+            zh_hant: '聯合書院（上行）',
+            en: 'United College (Upward)',
+            zh_hans: '联合书院（上行）',
+          },
+          lat: 22.420409,
+          lng: 114.205134,
+          routes: ['2', '2*', '3', '5'],
+        },
+        {
+          id: 'U6',
+          name: {
+            zh_hant: '新亞書院',
+            en: 'New Asia College',
+            zh_hans: '新亚书院',
+          },
+          lat: 22.421299,
+          lng: 114.207475,
+          routes: ['2', '2*', '4', '6A', '6B', '7', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'U7',
+          name: {
+            zh_hant: '新亞坊',
+            en: 'New Asia Circle',
+            zh_hans: '新亚坊',
+          },
+          lat: 22.421081,
+          lng: 114.207623,
+          routes: ['8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'D1',
+          name: {
+            zh_hant: '善衡書院',
+            en: 'S.H. Ho College',
+            zh_hans: '善衡书院',
+          },
+          lat: 22.418033,
+          lng: 114.209849,
+          routes: [
+            '1A',
+            '1B',
+            '2',
+            '2*',
+            '3',
+            '4',
+            '6A',
+            '6B',
+            '7',
+            'N',
+            'N*',
+            'H',
+            'H*',
+          ],
+        },
+        {
+          id: 'D2',
+          name: {
+            zh_hant: '大學行政樓',
+            en: 'Univ. Admin. Bldg.',
+            zh_hans: '大学行政楼',
+          },
+          lat: 22.418785,
+          lng: 114.20544,
+          routes: [
+            '1A',
+            '1B',
+            '2',
+            '2*',
+            '3',
+            '4',
+            '6A',
+            '6B',
+            '7',
+            '8',
+            '8*',
+            'N',
+            'N*',
+            'H',
+            'H*',
+          ],
+        },
+        {
+          id: 'D3',
+          name: {
+            zh_hant: '聯合書院（下行）',
+            en: 'United College (Downward)',
+            zh_hans: '联合书院（下行）',
+          },
+          lat: 22.420277,
+          lng: 114.205314,
+          routes: ['2', '2*', '4', '6A', '6B', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B1',
+          name: {
+            zh_hant: '伍宜孫書院（往後山）',
+            en: 'W.Y.S College (To Residence)',
+            zh_hans: '伍宜孙书院（往後山）',
+          },
+          lat: 22.421304,
+          lng: 114.203471,
+          routes: ['3', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B2',
+          name: {
+            zh_hant: '逸夫書院',
+            en: 'Shaw College',
+            zh_hans: '逸夫书院',
+          },
+          lat: 22.422454,
+          lng: 114.201285,
+          routes: ['3', '4', '5', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B3',
+          name: {
+            zh_hant: '敬文書院（往本部）',
+            en: 'CW.Chu College (To Main Campus)',
+            zh_hans: '敬文书院（往本部）',
+          },
+          lat: 22.425665,
+          lng: 114.206078,
+          routes: ['3', '4', '5', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B4',
+          name: {
+            zh_hant: '十五苑',
+            en: 'Residence No.15',
+            zh_hans: '十五苑',
+          },
+          lat: 22.423654,
+          lng: 114.206593,
+          routes: ['3', '4', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B5',
+          name: {
+            zh_hant: '聯合苑',
+            en: 'U.C. Staff Residence',
+            zh_hans: '联合苑',
+          },
+          lat: 22.423218,
+          lng: 114.205134,
+          routes: ['3', '4', '6A', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B6',
+          name: {
+            zh_hant: '陳震夏宿舍',
+            en: 'Chan Chun Ha Hostel',
+            zh_hans: '陈震夏宿舍',
+          },
+          lat: 22.42178,
+          lng: 114.20463,
+          routes: ['3', '4', '6A', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'B7',
+          name: {
+            zh_hant: '伍宜孫書院（往本部）',
+            en: 'W.Y.S College (To Main Campus)',
+            zh_hans: '伍宜孙书院（往本部）',
+          },
+          lat: 22.420986,
+          lng: 114.203503,
+          routes: ['3', '4', '6A', '7', '8', '8*', 'N', 'N*', 'H', 'H*'],
+        },
+        {
+          id: 'W1',
+          name: {
+            zh_hant: '39區',
+            en: 'Area 39',
+            zh_hans: '39区',
+          },
+          lat: 22.427621,
+          lng: 114.204353,
+          routes: ['4', '8', '8*', 'N', 'N*', 'H*'],
+        },
+        {
+          id: 'W2',
+          name: {
+            zh_hant: '敬文書院（往39區）',
+            en: 'CW.Chu (To Area 39)',
+            zh_hans: '敬文书院（往39区）',
+          },
+          lat: 22.425489,
+          lng: 114.206287,
+          routes: ['4'],
+        },
+        {
+          id: 'W3',
+          name: {
+            zh_hant: '環迴北站',
+            en: 'Campus Circuit North',
+            zh_hans: '环回北站',
+          },
+          lat: 22.425603,
+          lng: 114.206464,
+          routes: ['8', '8*'],
+        },
+        {
+          id: 'W4',
+          name: {
+            zh_hant: '環迴東站（往大學站）',
+            en: 'Campus Circuit East (To MTR)',
+            zh_hans: '环回东站（往大学站）',
+          },
+          lat: 22.419186,
+          lng: 114.212995,
+          routes: ['8', '8*'],
+        },
+        {
+          id: 'W5',
+          name: {
+            zh_hant: '環迴東站（往39區）',
+            en: 'Campus Circuit East (To Area 39)',
+            zh_hans: '环回东站（往39区）',
+          },
+          lat: 22.419273,
+          lng: 114.212859,
+          routes: ['4'],
+        },
+        {
+          id: 'X1',
+          name: {
+            zh_hant: '研究生宿舍一座',
+            en: 'PGH 1',
+            zh_hans: '研究生宿舍一座',
+          },
+          lat: 22.420228,
+          lng: 114.212177,
+          routes: ['1B', 'N*', 'H*'],
+        },
+        {
+          id: 'X2',
+          name: {
+            zh_hant: '十苑',
+            en: 'Residence No.10',
+            zh_hans: '十苑',
+          },
+          lat: 22.424517,
+          lng: 114.208299,
+          routes: ['H', 'H*'],
+        },
+        {
+          id: 'X3',
+          name: {
+            zh_hant: '崇基教學樓',
+            en: 'Chung Chi Teaching Bldg.',
+            zh_hans: '崇基教学楼',
+          },
+          lat: 22.415988,
+          lng: 114.208363,
+          routes: ['5', '6A', '6B', '7', '8*'],
+        },
+        {
+          id: 'S1',
+          name: {
+            zh_hant: '大學站（落客站）',
+            en: 'University Station (Alighting)',
+            zh_hans: '大学站（落客站）',
+          },
+          lat: 22.415368,
+          lng: 114.210643,
+          routes: ['1A', '1B', '2', '2*', '3', '4', '8', 'N', 'H'],
+        },
+      ];
+
+      const ROUTES = [
+        {
+          id: '1A',
+          color: '#F59E0B',
+          name: '本部線A',
+          line: '1A',
+          stops: ['T1', 'U1', 'U2', 'D2', 'D1', 'S1'],
+          stopOffsets: [0, 2, 4, 7, 10, 12],
+          departures: genDeparturesSpecial('07:40', '18:50', 10, {
+            removePatterns: [
+              { minute: 0, from: '07:40', to: '18:50' },
+              { minute: 30, from: '07:40', to: '18:50' },
+            ],
+          }),
+          service:
+            '07:40-18:50 · 約每 10 分鐘一班 · 預定班次每小時20, 40分發車',
+          comment: '連接大學站與本部校園。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '1B',
+          color: '#B97B4A',
+          name: '本部線B（停研究生宿舍1座）',
+          line: '1B',
+          stops: ['T1', 'U1', 'X1', 'U2', 'D2', 'D1', 'X1', 'S1'],
+          stopOffsets: [0, 2, 4, 6, 9, 12, 14, 16],
+          departures: genDepartures('08:00', '18:30', 30),
+          service: '08:00-18:30 · 每 30 分鐘一班',
+          comment: '連接大學站與本部校園（經研宿一座）。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '2',
+          color: '#ED5797',
+          name: '新聯線',
+          line: '2',
+          stops: ['T2', 'U1', 'U4', 'U5', 'U6', 'D3', 'D2', 'D1', 'S1'],
+          stopOffsets: [0, 2, 5, 6, 8, 10, 12, 15, 17],
+          departures: genDeparturesSpecial('07:15', '18:45', 60, {
+            addPatterns: [{ minute: 30, from: '07:15', to: '18:45' }],
+          }),
+          service: '07:45-18:45 · 約每 15 分鐘一班',
+          comment:
+            '連接大學站與新亞書院及聯合書院（逢31至00分開出的班次將停邵逸夫堂）。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '2*',
+          color: '#ED5797',
+          name: '新聯線（經邵逸夫堂）',
+          line: '2',
+          stops: ['T2', 'U1', 'U2', 'U4', 'U5', 'U6', 'D3', 'D2', 'D1', 'S1'],
+          stopOffsets: [0, 2, 4, 6, 7, 9, 11, 13, 16, 18],
+          departures: genDeparturesSpecial('08:00', '18:45', 60, {
+            addPatterns: [{ minute: 45, from: '07:15', to: '18:45' }],
+          }),
+          service: '07:45-18:45 · 約每 15 分鐘一班',
+          comment:
+            '連接大學站與新亞書院及聯合書院（逢31至00分開出的班次將停邵逸夫堂）。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '3',
+          color: '#3B8D5D',
+          name: '逸夫線',
+          line: '3',
+          stops: [
+            'T3',
+            'U1',
+            'U3',
+            'U4',
+            'B1',
+            'B2',
+            'B3',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'D2',
+            'D1',
+            'S1',
+          ],
+          stopOffsets: [0, 1, 3, 4, 5, 7, 9, 10, 11, 12, 14, 16, 17, 19, 20],
+          departures: genDepartures('09:00', '18:40', 20),
+          service: '09:00-18:40 · 每 20 分鐘一班',
+          comment: '連接大學站及逸夫書院。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '4',
+          color: '#F66E0B',
+          name: '環迴線',
+          line: '4',
+          stops: [
+            'T3',
+            'W5',
+            'W2',
+            'W1',
+            'B3',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'U6',
+            'D3',
+            'D2',
+            'D1',
+            'S1',
+          ],
+          stopOffsets: [0, 2, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 19, 20],
+          departures: genDepartures('07:30', '18:50', 20),
+          service: '06:30-22:30 · 每 20 分鐘一班',
+          comment: '連接大學站及後山宿舍區。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '5',
+          color: '#47ABDC',
+          name: '上行線',
+          line: '5',
+          stops: ['X3', 'U1', 'U2', 'U4', 'U5', 'U6', 'B1', 'B2', 'B3'],
+          stopOffsets: [0, 2, 4, 5, 6, 8, 10, 11, 13],
+          departures: genDeparturesSpecial('09:18', '17:26', 60, {
+            addPatterns: [
+              { minute: 22, from: '09:18', to: '17:26' },
+              { minute: 26, from: '09:18', to: '17:26' },
+            ],
+          }),
+          service: '教學日09:18-17:26 · 每小時 18,22,26 分由崇基教學樓開出',
+          comment: '由崇基教學樓前往敬文書院。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '6A',
+          color: '#5A5C26',
+          name: '下行線（敬文）',
+          line: '6A',
+          stops: [
+            'B3',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'U6',
+            'D3',
+            'D2',
+            'D1',
+            'T2',
+            'X3',
+          ],
+          stopOffsets: [0, 2, 3, 5, 7, 9, 11, 12, 14, 16, 18],
+          departures: genDepartures('09:10', '17:10', 60),
+          service: '教學日09:10-17:10 · 每 60 分鐘一班',
+          comment: '由敬文書院前往崇基教學樓。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '6B',
+          color: '#404B92',
+          name: '下行線（新聯）',
+          line: '6B',
+          stops: ['U6', 'D3', 'D2', 'D1', 'T2', 'X3'],
+          stopOffsets: [0, 1, 3, 5, 7],
+          departures: genDepartures('12:20', '17:20', 60),
+          service: '教學日12:20-17:20 · 每 60 分鐘一班',
+          comment: '由新亞書院前往崇基教學樓。',
+          days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          publicHoliday: false,
+        },
+        {
+          id: '7',
+          color: '#942944',
+          name: '下行線（逸夫）',
+          line: '7',
+          stops: ['B2', 'B7', 'U6', 'D3', 'D2', 'D1', 'T2', 'X3'],
+          stopOffsets: [0, 1, 3, 5, 7, 9, 11, 13],
+          departures: genDeparturesSpecial('08:18', '17:50', 60, {
+            addPatterns: [{ minute: 50, from: '08:18', to: '17:50' }],
+          }),
+          service: '教學日08:18-17:50 · 每小時 18,50 分由逸夫書院開出',
+          comment: '由逸夫書院前往崇基教學樓。',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '8',
+          color: '#FFC760',
+          name: '西部線',
+          line: '8',
+          stops: [
+            'W1',
+            'B3',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'D2',
+            'U3',
+            'U7',
+            'D3',
+            'B1',
+            'B2',
+            'W1',
+            'W3',
+            'W4',
+            'S1',
+          ],
+          stopOffsets: [
+            0, 1, 2, 3, 4, 6, 8, 10, 12, 13, 14, 15, 17, 20, 21, 23, 25,
+          ],
+          departures: genDepartures('07:40', '18:40', 20),
+          service: '07:40-18:40 · 每 20 分鐘一班',
+          comment:
+            '連接後山宿舍區，本部校園及大學站 ＃非教學日期間將停大學站廣場及崇基教學樓',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: '8*',
+          color: '#FFC760',
+          name: '西部線（往崇基教學樓）',
+          line: '8',
+          stops: [
+            'W1',
+            'B3',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'D2',
+            'U3',
+            'U7',
+            'D3',
+            'B1',
+            'B2',
+            'W1',
+            'W3',
+            'W4',
+            'T2',
+            'X3',
+          ],
+          stopOffsets: [
+            0, 1, 2, 3, 4, 6, 8, 10, 12, 13, 14, 15, 17, 20, 21, 23, 25, 27,
+          ],
+          departures: genDepartures('07:40', '18:40', 20),
+          service: '07:40-18:40 · 每 20 分鐘一班',
+          comment:
+            '連接後山宿舍區，本部校園及大學站 ＃非教學日期間將停大學站廣場及崇基教學樓',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: 'N',
+          color: '#836EED',
+          name: '晚間線',
+          line: 'N',
+          stops: [
+            'T1',
+            'U1',
+            'U2',
+            'U7',
+            'D3',
+            'B1',
+            'B2',
+            'W1',
+            'B3',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'U6',
+            'D3',
+            'D2',
+            'D1',
+            'S1',
+          ],
+          stopOffsets: [
+            0, 2, 4, 7, 9, 10, 12, 15, 17, 19, 20, 21, 22, 24, 26, 28, 29, 31,
+            33, 35,
+          ],
+          departures: genDeparturesSpecial('19:00', '23:30', 15, {
+            removePatterns: [{ minute: 0, from: '19:00', to: '23:30' }],
+          }),
+          service: '19:00–23:30 · 約每 15 分鐘一班',
+          comment: '夜間環線（逢00分開出的班次將停研究生宿舍一座）',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: 'N*',
+          color: '#836EED',
+          name: '晚間線（經研宿一座）',
+          line: 'N',
+          stops: [
+            'T1',
+            'X1',
+            'U1',
+            'U2',
+            'U7',
+            'D3',
+            'B1',
+            'B2',
+            'W1',
+            'B3',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'U6',
+            'D3',
+            'D2',
+            'D1',
+            'X1',
+            'S1',
+          ],
+          stopOffsets: [
+            0, 2, 4, 6, 9, 11, 12, 14, 17, 19, 21, 22, 23, 24, 26, 28, 30, 31,
+            33, 35, 37, 40,
+          ],
+          departures: genDepartures('19:00', '23:30', 60),
+          service: '19:00–23:30 · 約每 15 分鐘一班',
+          comment: '夜間環線（逢00分開出的班次將停研究生宿舍一座）',
+          days: WORK_DAYS,
+          publicHoliday: false,
+        },
+        {
+          id: 'H',
+          color: '#513989',
+          name: '假日線',
+          line: 'H',
+          stops: [
+            'T1',
+            'U1',
+            'U2',
+            'U7',
+            'D3',
+            'B1',
+            'B2',
+            'B3',
+            'X2',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'U6',
+            'D3',
+            'D2',
+            'D1',
+            'S1',
+          ],
+          stopOffsets: [
+            0, 2, 4, 7, 9, 10, 12, 14, 16, 18, 19, 20, 22, 24, 26, 28, 29, 31,
+            33, 35,
+          ],
+          departures: genDeparturesSpecial('08:20', '23:20', 10, {
+            removePatterns: [{ minute: 0, from: '08:20', to: '23:20' }],
+          }),
+          service: '08:20–23:20 · 約每 10 分鐘一班 · 預定班次#20,40,00分開出',
+          comment: '假日環線（逢00分開出的班次將停研究生宿舍一座及39區）',
+          days: SUN_DAY,
+          publicHoliday: true,
+        },
+        {
+          id: 'H*',
+          color: '#513989',
+          name: '假日線（經研宿一座及39區）',
+          line: 'H',
+          stops: [
+            'T1',
+            'X1',
+            'U1',
+            'U2',
+            'U7',
+            'D3',
+            'B1',
+            'B2',
+            'W1',
+            'B3',
+            'X2',
+            'B4',
+            'B5',
+            'B6',
+            'B2',
+            'B7',
+            'U6',
+            'D3',
+            'D2',
+            'D1',
+            'X1',
+            'S1',
+          ],
+          stopOffsets: [
+            0, 2, 4, 6, 9, 11, 12, 14, 17, 19, 21, 23, 25, 26, 27, 29, 31, 33,
+            35, 36, 38, 40, 42,
+          ],
+          departures: genDepartures('09:00', '23:20', 60),
+          service: '08:20–23:20 · 約每 10 分鐘一班 · 預定班次#20,40,00分開出',
+          comment: '假日環線（逢00分開出的班次將停研究生宿舍一座及39區）',
+          days: SUN_DAY,
+          publicHoliday: true,
+        },
+      ];
+      const STOP_BY_ID = Object.fromEntries(STOPS.map((s) => [s.id, s]));
+      const ROUTE_BY_ID = Object.fromEntries(ROUTES.map((r) => [r.id, r]));
+      // Fast index: stopId -> [{routeId, idx}] (idx = position in that route)
+      const STOP_TO_ROUTES = new Map();
+      for (const r of ROUTES) {
+        for (let idx = 0; idx < r.stops.length; idx++) {
+          const sid = r.stops[idx];
+          if (!STOP_TO_ROUTES.has(sid)) STOP_TO_ROUTES.set(sid, []);
+          STOP_TO_ROUTES.get(sid).push({ routeId: r.id, idx });
+        }
+      }
+
+      // ========= 2) Time utilities =========
+      function toMin(hhmm) {
+        const [h, m] = hhmm.split(':').map(Number);
+        return h * 60 + m;
+      }
+      function toHHMM(m) {
+        m = ((m % 1440) + 1440) % 1440;
+        const h = Math.floor(m / 60),
+          mm = m % 60;
+        return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+      function compareHHMM(a, b) {
+        return toMin(a) - toMin(b);
+      }
+
+      /**
+       * Returns route.departures filtered for the given date.
+       * - Saturday early last bus cut-offs (if NOT a public holiday)
+       */
+      function getDeparturesForDate(route, date) {
+        let deps = route.departures.slice(); // copy
+        if (IS_PUBLIC_HOLIDAY) return deps; // PH handled in routeRunsOn, do not clamp here
+
+        const d = dayStr(date);
+        if (d === 'Sat') {
+          // Early end on Saturday
+          const cutoffMap = { 5: '13:26', '6A': '13:10', 7: '13:18' };
+          const cutoff = cutoffMap[route.id];
+          if (cutoff) deps = deps.filter((t) => compareHHMM(t, cutoff) <= 0);
+        }
+        return deps;
+      }
+
+      function genDepartures(a, b, headway) {
+        const A = toMin(a),
+          B = toMin(b),
+          out = [];
+        for (let t = A; t <= B; t += headway) out.push(toHHMM(t));
+        return out;
+      }
+      function genDeparturesSpecial(startHHMM, endHHMM, headway, opts = {}) {
+        let times = genDepartures(startHHMM, endHHMM, headway);
+
+        const toMinNum = (hhmm) => {
+          const [h, m] = hhmm.split(':').map(Number);
+          return h * 60 + m;
+        };
+
+        // --- Normalize helpers ---
+        const normalizeToArray = (single, plural) => {
+          const arr = [];
+          if (single) arr.push(single);
+          if (Array.isArray(plural)) arr.push(...plural);
+          return arr;
+        };
+
+        // --- Remove patterns (unchanged logic, now via normalize helper) ---
+        const removePatterns = normalizeToArray(
+          opts.removePattern,
+          opts.removePatterns
+        );
+        if (removePatterns.length) {
+          for (const pat of removePatterns) {
+            const fromMin = toMinNum(pat.from);
+            const toMinVal = toMinNum(pat.to);
+            times = times.filter((t) => {
+              const m = toMinNum(t);
+              const mm = m % 60;
+              return !(m >= fromMin && m <= toMinVal && mm === pat.minute);
+            });
+          }
+        }
+
+        // --- Add patterns (now supports single or array) ---
+        const addPatterns = normalizeToArray(opts.addPattern, opts.addPatterns);
+        if (addPatterns.length) {
+          for (const pat of addPatterns) {
+            const fromMin = toMinNum(pat.from);
+            const toMinVal = toMinNum(pat.to);
+            for (let m = fromMin; m <= toMinVal; m += 60) {
+              const hh = Math.floor(m / 60);
+              const mm = pat.minute;
+              const tStr = `${String(hh).padStart(2, '0')}:${String(
+                mm
+              ).padStart(2, '0')}`;
+              if (!times.includes(tStr)) times.push(tStr);
+            }
+          }
+          // Sort once after processing all add patterns
+          times.sort((a, b) => toMinNum(a) - toMinNum(b));
+        }
+
+        return times;
+      }
+
+      function nowLocalInputValue() {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+          d.getDate()
+        )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+      function parseDT(inputEl) {
+        // returns Date or now
+        try {
+          return inputEl.value ? new Date(inputEl.value) : new Date();
+        } catch {
+          return new Date();
+        }
+      }
+      function minutesInDay(d) {
+        return d.getHours() * 60 + d.getMinutes();
+      }
+      function dayStr(d) {
+        return DAYS[d.getDay()];
+      }
+
+      function routeRunsOn(route, date) {
+        // Priority 1: Public holiday overrides weekday logic completely
+        if (IS_PUBLIC_HOLIDAY) {
+          // Only routes explicitly marked for public holidays should run
+          return !!route.publicHoliday;
+        }
+
+        const d = dayStr(date); // 'Mon'..'Sun'
+        if (!route.days.includes(d)) return false;
+
+        // Teaching / Non-teaching gating
+        const id = route.id;
+        // 5, 6A, 6B, 7, 8 => teaching day only
+        if (['5', '6A', '6B', '7', '8'].includes(id) && !IS_TEACHING_DAY)
+          return false;
+        // 8* => non-teaching day only
+        if (id === '8*' && !IS_NON_TEACHING_DAY) return false;
+
+        return true;
+      }
+
+      // Next departures considering day and time-of-day, using stopOffsets and supporting repeated stops
+      function nextDepartureAtStopAfter(
+        routeId,
+        stopId,
+        baseDate,
+        todayOnly = true
+      ) {
+        const r = ROUTE_BY_ID[routeId];
+        if (!r) return null;
+
+        // Must be running *today*
+        if (!routeRunsOn(r, baseDate)) return null;
+
+        // Find all occurrences of stopId in this route
+        const idxs = [];
+        for (let i = 0; i < r.stops.length; i++)
+          if (r.stops[i] === stopId) idxs.push(i);
+        if (idxs.length === 0) return null;
+
+        const afterMin = minutesInDay(baseDate);
+
+        // Build all arrival minutes (minutes since 00:00 local) for *today* across all occurrences
+        const arrMins = [];
+        for (const i of idxs) {
+          const off = r.stopOffsets?.[i];
+          if (off == null) continue;
+          for (const dep of getDeparturesForDate(r, baseDate)) {
+            arrMins.push(toMin(dep) + off);
+          }
+        }
+        arrMins.sort((a, b) => a - b);
+
+        // First arrival today at/after the query time
+        const today = arrMins.find((t) => t >= afterMin);
+        if (today != null)
+          return { time: today, wraps: false, date: new Date(baseDate) };
+
+        if (todayOnly) return null;
+
+        // Otherwise check *next* day with the same schedule
+        const nd = new Date(baseDate);
+        nd.setDate(nd.getDate() + 1);
+        if (!routeRunsOn(r, nd)) return null;
+
+        const first = arrMins[0] ?? null;
+        return first == null
+          ? null
+          : { time: first + 1440, wraps: true, date: nd };
+      }
+
+      function travelMinutes(routeId, fromId, toId) {
+        const r = ROUTE_BY_ID[routeId];
+        if (!r) return Infinity;
+        const a = r.travelMins[fromId],
+          b = r.travelMins[toId];
+        if (a == null || b == null) return Infinity;
+        return Math.abs(b - a);
+      }
+
+      // ========= 3) Map =========
+      const map = L.map('map', { zoomControl: false, zoomSnap: 0.1 });
+      const baseLayers = {
+        Normal: L.tileLayer(
+          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18,
+            minZoom: 15,
+          }
+        ),
+        Light: L.tileLayer(
+          'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+          {
+            attribution: '&copy; OpenStreetMap contributors & CARTO',
+            maxZoom: 18,
+            minZoom: 15,
+          }
+        ),
+      };
+      baseLayers['Normal'].addTo(map);
+      L.control
+        .layers(baseLayers, {}, { position: 'bottomleft', collapsed: true })
+        .addTo(map);
+      let currentBase = baseLayers['Normal']; // already added above
+      map.on('baselayerchange', (e) => {
+        currentBase = e.layer;
+      }); // keep in sync
+
+      function applyMapTheme(force = false) {
+        // dark theme (not 'light') => switch to 'Light' basemap
+        const isDark =
+          document.documentElement.getAttribute('data-theme') !== 'light';
+        const target = isDark ? baseLayers['Light'] : baseLayers['Normal'];
+        if (force || currentBase !== target) {
+          if (currentBase && map.hasLayer(currentBase))
+            map.removeLayer(currentBase);
+          target.addTo(map);
+          currentBase = target;
+        }
+      }
+
+      const bounds = L.latLngBounds(STOPS.map((s) => [s.lat, s.lng]));
+      map.fitBounds(bounds.pad(0.2));
+      map.setZoom(16.8);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      const markerByStop = {};
+      let selectedStopId = null,
+        selectedRouteId = null;
+      let lastPlanFromId = null,
+        lastPlanToId = null;
+      let activeRouteLayer = null;
+      let plannedLayers = [];
+      let SHOW_COUNTDOWN = false; // false = hh:mm, true = mins-to-arrive
+
+      const timeModeBtn = document.getElementById('timeModeBtn');
+      const timeModeLabel = document.getElementById('timeModeLabel');
+
+      function refreshTimeModeLabel() {
+        if (timeModeLabel)
+          timeModeLabel.textContent = SHOW_COUNTDOWN ? 'min' : '24h';
+      }
+
+      if (timeModeBtn) {
+        timeModeBtn.onclick = () => {
+          SHOW_COUNTDOWN = !SHOW_COUNTDOWN;
+          refreshTimeModeLabel();
+          try {
+            localStorage.setItem('show_countdown', SHOW_COUNTDOWN ? '1' : '0');
+          } catch {}
+          updateUpcoming(); // re-render list with new format
+        };
+      }
+      refreshTimeModeLabel();
+
+      function routeColor(id) {
+        return ROUTE_BY_ID[id]?.color || '#6b7280';
+      }
+
+      // Collapse badges by "line": if both normal & starred exist, show normal (e.g. "2")
+      // If ONLY the starred exists, show "2*" and click should select the starred route.
+      function summarizeRouteBadges(routeIds, stopId) {
+        // 处理 8/8* 特殊逻辑
+        let ids = routeIds.slice();
+
+        // T2 和 X3 特殊：始终显示 8*
+        if (stopId === 'T2' || stopId === 'X3') {
+          ids = ids.filter((rid) => rid !== '8'); // 移除 8，只保留 8*
+          if (!ids.includes('8*')) ids.push('8*'); // 若未包含则补上
+        } else {
+          // 其它站点：教学日只显示 8，非教学日只显示 8*
+          if (ids.includes('8') || ids.includes('8*')) {
+            ids = ids.filter((rid) => rid !== '8' && rid !== '8*');
+            if (IS_TEACHING_DAY && routeIds.includes('8')) {
+              ids.push('8');
+            } else if (!IS_TEACHING_DAY && routeIds.includes('8*')) {
+              ids.push('8*');
+            }
+          }
+        }
+
+        // 排序与合并逻辑保持原样
+        const firstIndex = new Map();
+        ids.forEach((rid, i) => {
+          if (!firstIndex.has(rid)) firstIndex.set(rid, i);
+        });
+
+        const byBase = new Map();
+        for (const rid of ids) {
+          const r = ROUTE_BY_ID[rid];
+          if (!r) continue;
+          const base = r.line || rid.replace(/\*$/, '');
+          const isStar = /\*$/.test(rid);
+          if (!byBase.has(base))
+            byBase.set(base, {
+              order: firstIndex.get(rid),
+              normal: null,
+              star: null,
+            });
+          const entry = byBase.get(base);
+          entry.order = Math.min(entry.order, firstIndex.get(rid));
+          if (isStar) entry.star = rid;
+          else entry.normal = rid;
+        }
+
+        return Array.from(byBase.entries())
+          .sort((a, b) => a[1].order - b[1].order)
+          .map(([base, v]) => {
+            if (v.normal)
+              return {
+                routeId: v.normal,
+                label: base,
+                color: routeColor(v.normal),
+              };
+            if (v.star)
+              return {
+                routeId: v.star,
+                label: base + '*',
+                color: routeColor(v.star),
+              };
+            return null;
+          })
+          .filter(Boolean);
+      }
+
+      function markerHtml(stop) {
+        const refDate = parseDT(nowControl);
+        const nowMin = minutesInDay(refDate);
+
+        if (stop.id === 'S1') {
+          const rid = 'Terminal';
+          const r = ROUTE_BY_ID[rid];
+          let activeNow = true;
+
+          if (r && routeRunsOn(r, refDate)) {
+            const deps = getDeparturesForDate(r, refDate);
+            if (deps.length) {
+              const first = toMin(deps[0]);
+              const last = toMin(deps[deps.length - 1]);
+            }
+          }
+
+          // respect the "hide inactive" toggle; grey if shown but inactive
+          const pills =
+            !HIDE_INACTIVE_BADGES || activeNow
+              ? `<span class="pill" style="background:${'#00aa86'};">Terminal</span>`
+              : '';
+
+          return `
+            <svg class="pin-svg" viewBox="0 0 56 64" aria-hidden="true">
+              <circle class="pin-fill" cx="28" cy="45" r="7"></circle>
+              <path class="pin-fill" d="M22 54 L34 54 L28 64 Z"></path>
+            </svg>
+            <div class="badge-row">${pills}</div>
+          `;
+        }
+
+        const badges = summarizeRouteBadges(stop.routes, stop.id)
+          .map((b) => {
+            const r = ROUTE_BY_ID[b.routeId];
+
+            let activeNow = false;
+            if (routeRunsOn(r, refDate)) {
+              const deps = getDeparturesForDate(r, refDate);
+              if (deps.length) {
+                const first = toMin(deps[0]);
+                const last = toMin(deps[deps.length - 1]);
+                activeNow = nowMin >= first && nowMin <= last;
+              }
+            }
+
+            return { ...b, activeNow };
+          })
+
+          .filter((b) => b.activeNow || !HIDE_INACTIVE_BADGES);
+
+        const pills = badges
+          .map((b) => {
+            const bg = b.activeNow ? b.color : '#6b7280'; // 不在營運時段 => 灰色
+            return `<span class="pill" style="background:${bg};">${b.label}</span>`;
+          })
+          .join('');
+
+        return `
+          <svg class="pin-svg" viewBox="0 0 56 64" aria-hidden="true">
+            <circle class="pin-fill" cx="28" cy="45" r="7"></circle>
+            <path class="pin-fill" d="M22 54 L34 54 L28 64 Z"></path>
+          </svg>
+          <div class="badge-row">${pills}</div>
+        `;
+      }
+
+      function initMarkers() {
+        STOPS.forEach((stop) => {
+          const m = L.marker([stop.lat, stop.lng], {
+            icon: L.divIcon({
+              html: markerHtml(stop),
+              className: 'stop-marker',
+              iconSize: [56, 64],
+              iconAnchor: [28, 64],
+            }),
+          }).addTo(map);
+          m.on('click', () => selectStop(stop.id));
+          markerByStop[stop.id] = m;
+        });
+      }
+
+      // ========= 4) UI: Stop & Upcoming =========
+      const selStopName = document.getElementById('selStopName');
+      const selStopSub = document.getElementById('selStopSub');
+      const upcomingList = document.getElementById('upcomingList');
+      const nowControl = document.getElementById('nowControl');
+      nowControl.value = nowLocalInputValue();
+
+      function stopIdx(route, stopId) {
+        return route.stops.indexOf(stopId);
+      }
+
+      function zhStopLabel(stopId) {
+        const s = STOP_BY_ID[stopId];
+        return s ? s.name.zh_hant : '—';
+      }
+
+      function pathPreviewForStopAtIndex(route, stopIndex) {
+        const stops = route.stops;
+        const N = stops.length;
+        if (stopIndex >= N - 1) return '終點站'; // already at terminal
+
+        const next1 = stops[stopIndex + 1];
+        const finalstop = stops[N - 1];
+        const next1Label = STOP_BY_ID[next1]?.name?.zh_hant ?? next1;
+        const finalLabel = STOP_BY_ID[finalstop]?.name?.zh_hant ?? finalstop;
+
+        // If the next stop is the terminal, only show it in bold
+        if (stopIndex + 1 === N - 1) {
+          return `<b>>></b> <b>${next1Label}</b>`;
+        }
+
+        if (stopIndex + 2 === N - 1) {
+          return `<b>>></b> <b>${next1Label}</b>>>${finalLabel}`;
+        }
+
+        const next2 = stops[stopIndex + 2];
+        const next2Label = STOP_BY_ID[next2]?.name?.zh_hant ?? next1;
+        return `<b>>></b> <b>${next1Label}</b>>>${next2Label}>><b>...</b>`;
+      }
+
+      function stopIndices(route, stopId) {
+        const idxs = [];
+        for (let i = 0; i < route.stops.length; i++)
+          if (route.stops[i] === stopId) idxs.push(i);
+        return idxs;
+      }
+
+      function directionForStopAtIndex(route, stopIndex) {
+        const t = route.terminals || {
+          start: route.stops[0],
+          mid: null,
+          end: route.stops.at(-1),
+        };
+        if (t.mid) {
+          const iMid = route.stops.indexOf(t.mid);
+          if (iMid >= 0 && stopIndex <= iMid)
+            return `往 ${STOP_BY_ID[t.mid].name.zh_hant}`;
+        }
+        const endId = t.end || route.stops.at(-1);
+        return `往 ${STOP_BY_ID[endId].name.zh_hant}`;
+      }
+
+      /**
+       * Return up to N upcoming arrivals for a given stop on a route,
+       * accounting for MULTIPLE occurrences of that stop.
+       * Each item: { time, routeId, stopIndex }
+       */
+      function nextArrivalsForStop(route, stopId, baseDate, N = 10) {
+        if (!routeRunsOn(route, baseDate)) return [];
+        const afterMin = minutesInDay(baseDate);
+        const idxs = stopIndices(route, stopId);
+        if (idxs.length === 0) return [];
+
+        // Build a merged, sorted list of arrivals across ALL occurrences
+        const all = [];
+        for (const i of idxs) {
+          const off = route.stopOffsets?.[i];
+          if (off == null) continue;
+          for (const dep of getDeparturesForDate(route, baseDate)) {
+            const t = toMin(dep) + off;
+            if (t >= afterMin)
+              all.push({ time: t, routeId: route.id, stopIndex: i });
+          }
+        }
+        all.sort((a, b) => a.time - b.time);
+        return all.slice(0, N);
+      }
+
+      /**
+       * Travel minutes along a specific route between two stop IDs,
+       * choosing the SHORTEST forward segment among all occurrences.
+       * Returns Infinity if not reachable in forward order.
+       */
+      function travelMinutes(routeId, fromId, toId) {
+        const r = ROUTE_BY_ID[routeId];
+        if (!r) return Infinity;
+        const I = stopIndices(r, fromId);
+        const J = stopIndices(r, toId);
+        if (I.length === 0 || J.length === 0) return Infinity;
+
+        let best = Infinity;
+        for (const i of I) {
+          const oi = r.stopOffsets?.[i];
+          if (oi == null) continue;
+          for (const j of J) {
+            const oj = r.stopOffsets?.[j];
+            if (oj == null) continue;
+            if (j > i) best = Math.min(best, oj - oi); // forward in the sequence
+          }
+        }
+        return best;
+      }
+
+      function updateUpcoming() {
+        if (!selectedStopId) {
+          upcomingList.innerHTML =
+            '<div class="sr-muted">請在地圖點選站點</div>';
+          return;
+        }
+        const refDate = parseDT(nowControl);
+        const stop = STOP_BY_ID[selectedStopId];
+        let all = [];
+
+        for (const rId of stop.routes) {
+          const r = ROUTE_BY_ID[rId];
+          // Grab up to 2 per route to diversify; tweak as you like
+          const arrivals = nextArrivalsForStop(r, selectedStopId, refDate, 10);
+          all = all.concat(arrivals);
+        }
+
+        all.sort((a, b) => a.time - b.time);
+        all = all.slice(0, 5);
+
+        upcomingList.innerHTML = all.length
+          ? ''
+          : '<div class="sr-muted">此時間無班次</div>';
+
+        for (const u of all) {
+          const r = ROUTE_BY_ID[u.routeId];
+          const pill = `<span class="pill" style="background:${r.color};">${u.routeId}</span>`;
+          const dir = pathPreviewForStopAtIndex(r, u.stopIndex);
+          const row = document.createElement('div');
+          row.className = 'up-item';
+
+          const nowMin = minutesInDay(refDate);
+          let rightText;
+          if (SHOW_COUNTDOWN) {
+            const delta = Math.max(0, u.time - nowMin);
+            rightText = delta < 2 ? 'Arriving' : `${delta} min`;
+          } else {
+            rightText = toHHMM(u.time);
+          }
+          row.innerHTML = `
+            <div class="route-dir">
+              ${pill}
+              <div class="sr-muted" style="font-size:12px">${dir}</div>
+            </div>
+            <div class="time">${rightText}</div>
+          `;
+
+          row.onclick = () => selectRoute(u.routeId);
+          upcomingList.appendChild(row);
+        }
+      }
+
+      nowControl.addEventListener('change', updateUpcoming);
+      nowControl.addEventListener('change', () => {
+        const d = parseDT(nowControl);
+        updateDayFlagsByDate(d);
+        updateUpcoming();
+      });
+
+      function autoShowNextBusForStop(stopId) {
+        const stop = STOP_BY_ID[stopId];
+        if (!stop) return;
+
+        const refDate = parseDT(nowControl);
+        let best = null; // { time, routeId, stopIndex }
+
+        for (const rid of stop.routes) {
+          const r = ROUTE_BY_ID[rid];
+          if (!r) continue;
+          const arr = nextArrivalsForStop(r, stopId, refDate, 1); // 取每條線一班
+          if (arr.length) {
+            const a = arr[0];
+            if (!best || a.time < best.time) best = a;
+          }
+        }
+
+        if (best) {
+          showDrawerMode('route');
+          selectRoute(best.routeId);
+
+          setTimeout(() => {
+            const rows = drawerList.querySelectorAll('.route-row');
+            const rowEl = rows[best.stopIndex];
+            if (rowEl)
+              rowEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }, 0);
+        } else {
+          drawer.style.display = 'none';
+        }
+      }
+
+      function selectStop(stopId) {
+        const prev = selectedStopId;
+        if (prev && markerByStop[prev]) {
+          const el = markerByStop[prev].getElement();
+          if (el) el.classList.remove('selected');
+        }
+        selectedStopId = stopId;
+        if (markerByStop[stopId]) {
+          const el = markerByStop[stopId].getElement();
+          if (el) el.classList.add('selected');
+        }
+        const s = STOP_BY_ID[stopId];
+        selStopName.textContent = s.name.zh_hant;
+        selStopSub.textContent = `${s.name.en} · ${s.name.zh_hans}`;
+        updateUpcoming();
+        openStopPopup(s);
+        autoShowNextBusForStop(stopId);
+      }
+
+      function openStopPopup(stop) {
+        const rBadges = summarizeRouteBadges(stop.routes, stop.id);
+        const rPills = rBadges
+          .map(
+            (b) =>
+              `<span class="pill" style="background:${b.color};cursor:pointer;" data-route="${b.routeId}">${b.label}</span>`
+          )
+          .join(' ');
+        const html = `<div style="min-width:220px">
+          <div style="font-weight:800;margin-bottom:4px">${stop.name.zh_hant}</div>
+          <div class="sr-muted" style="margin-bottom:8px">${stop.name.en} · ${stop.name.zh_hans}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${rPills}</div>
+        </div>`;
+        L.popup({
+          closeButton: true,
+          autoPan: true,
+          offset: L.point(0, -18), // << move popup up ~ pin height
+          autoPanPaddingTopLeft: L.point(20, 20),
+          autoPanPaddingBottomRight: L.point(20, 80),
+        })
+          .setLatLng([stop.lat, stop.lng])
+          .setContent(html)
+          .openOn(map);
+        setTimeout(() => {
+          for (const el of document.querySelectorAll('[data-route]')) {
+            el.addEventListener('click', (e) => {
+              e.stopPropagation();
+              selectRoute(el.getAttribute('data-route'));
+            });
+          }
+        }, 0);
+      }
+
+      // ========= 5) Drawer (route view / itinerary view) =========
+      const drawer = document.getElementById('routeDrawer');
+      const drawerTitle = document.getElementById('drawerTitle');
+      const drawerPill = document.getElementById('drawerRoutePill');
+      const routeView = document.getElementById('routeView');
+      const itinView = document.getElementById('itinView');
+      const drawerDesc = document.getElementById('drawerDesc');
+      const drawerList = document.getElementById('drawerRouteList');
+      const backBtn = document.getElementById('backBtn');
+      const themeToggle = document.getElementById('themeToggle');
+      const iconMoon = document.getElementById('iconMoon');
+      const iconSun = document.getElementById('iconSun');
+      const expandBtn = document.getElementById('expandBtn');
+      const collapseBtn = document.getElementById('collapseBtn');
+      const hideDrawerBtn = document.getElementById('hideDrawerBtn');
+
+      let drawerExpanded = false; // default collapsed
+      let drawerMode = 'route'; // 'route' | 'itin'
+      let HIDE_INACTIVE_BADGES = true;
+
+      function showDrawerMode(mode) {
+        drawerMode = mode;
+        if (mode === 'itin') {
+          routeView.style.display = 'none';
+          itinView.style.display = '';
+        } else {
+          routeView.style.display = '';
+          itinView.style.display = 'none';
+        }
+        applyDrawerExpanded();
+      }
+
+      function refreshAllMarkers() {
+        // Rebuild HTML for each marker using the current time / toggle
+        STOPS.forEach((stop) => {
+          const m = markerByStop[stop.id];
+          if (!m) return;
+          m.setIcon(
+            L.divIcon({
+              html: markerHtml(stop), // markerHtml will read the toggle & time
+              className: 'stop-marker',
+              iconSize: [56, 64],
+              iconAnchor: [28, 64],
+            })
+          );
+        });
+      }
+
+      function applyDrawerExpanded() {
+        drawer.classList.toggle('drawer-collapsed', !drawerExpanded);
+
+        const isItin = drawerMode === 'itin';
+        drawer.classList.toggle('overlay', isItin && drawerExpanded);
+
+        // Buttons visibility
+        if (!isItin) {
+          if (expandBtn)
+            expandBtn.style.display = drawerExpanded ? 'none' : 'inline-flex';
+          if (collapseBtn)
+            collapseBtn.style.display = drawerExpanded ? 'inline-flex' : 'none';
+          if (hideDrawerBtn) hideDrawerBtn.style.display = 'inline-flex';
+        } else {
+          // itinerary mode
+          if (expandBtn)
+            expandBtn.style.display = drawerExpanded ? 'none' : 'inline-flex';
+          if (collapseBtn)
+            collapseBtn.style.display = drawerExpanded ? 'inline-flex' : 'none';
+          if (hideDrawerBtn) hideDrawerBtn.style.display = 'inline-flex';
+        }
+
+        /* NEW: never show back button when expanded itinerary is open */
+        if (backBtn)
+          backBtn.style.display =
+            isItin && !drawerExpanded ? 'inline-flex' : 'none';
+      }
+
+      if (expandBtn) {
+        expandBtn.onclick = () => {
+          const wasCollapsed = !drawerExpanded;
+          drawerExpanded = true;
+          applyDrawerExpanded();
+
+          if (wasCollapsed) {
+            requestAnimationFrame(() => {
+              highlightAndScrollSelectedStop();
+            });
+          }
+        };
+      }
+      if (hideDrawerBtn) {
+        hideDrawerBtn.onclick = () => {
+          drawer.style.display = 'none';
+          drawerExpanded = false;
+          // keep current mode; user can reopen by selecting route/plan again
+        };
+      }
+      if (collapseBtn) {
+        collapseBtn.onclick = () => {
+          // Always collapse back to non-expanded stage
+          drawerExpanded = false;
+
+          // Also hide any expanded details in itinerary cards
+          const cards = Array.from(
+            drawerItinList.querySelectorAll('.itin-card .itin-details')
+          );
+          cards.forEach((box) => {
+            box.style.display = 'none';
+            box.innerHTML = '';
+          });
+
+          applyDrawerExpanded();
+        };
+      }
+
+      backBtn.onclick = () => {
+        // switch to route mode and collapse (no expand stage)
+        showDrawerMode('route');
+        drawerExpanded = false;
+        applyDrawerExpanded();
+
+        // restore header text/pill
+        if (selectedRouteId) {
+          const r = ROUTE_BY_ID[selectedRouteId];
+          drawerTitle.textContent = r ? r.name : '未選擇路線';
+          drawerPill.textContent = r ? r.id : '—';
+          drawerPill.style.background = r ? r.color : '#6b7280';
+        } else {
+          drawerTitle.textContent = '未選擇路線';
+          drawerPill.textContent = '—';
+          drawerPill.style.background = '#6b7280';
+        }
+      };
+
+      function daysLabel(r) {
+        const map = {
+          Mon: '一',
+          Tue: '二',
+          Wed: '三',
+          Thu: '四',
+          Fri: '五',
+          Sat: '六',
+          Sun: '日',
+        };
+        const zh = r.days.map((d) => map[d]).join('、');
+        return `營運日：週${zh}；公眾假期：${r.publicHoliday ? '有' : '無'}`;
+      }
+
+      function highlightAndScrollSelectedStop() {
+        if (drawerMode !== 'route') return;
+        const r = ROUTE_BY_ID[selectedRouteId];
+        if (!r || !selectedStopId) return;
+
+        drawerList
+          .querySelectorAll('.route-row.current-stop')
+          .forEach((el) => el.classList.remove('current-stop'));
+
+        const firstIdx = r.stops.findIndex((sid) => sid === selectedStopId);
+        if (firstIdx < 0) return;
+
+        const targetRow = drawerList.children[firstIdx];
+        if (targetRow) {
+          targetRow.classList.add('current-stop');
+          targetRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }
+
+      function selectRoute(routeId) {
+        selectedRouteId = routeId;
+        const r = ROUTE_BY_ID[routeId];
+        if (!r) return;
+        drawer.style.display = 'block';
+        drawerPill.textContent = r.id;
+        drawerPill.classList.remove('icon-mode');
+        drawerPill.style.background = r.color;
+        drawerTitle.textContent = `${r.name}`;
+
+        // route view content
+        drawerDesc.innerHTML =
+          `<div><strong>服務時間：</strong>${r.service || '—'}</div>` +
+          `<div class="sr-muted" style="margin-top:4px">${daysLabel(r)}</div>` +
+          (r.comment
+            ? `<div class="sr-muted" style="margin-top:4px">${r.comment}</div>`
+            : '');
+
+        drawerList.innerHTML = '';
+        r.stops.forEach((sid, idx) => {
+          const s = STOP_BY_ID[sid];
+          const row = document.createElement('div');
+          row.className = 'route-row';
+          row.innerHTML = `<div class="no">${idx + 1}</div>
+                           <div class="name">${s.name.zh_hant}</div>
+                           <div class="sub">${s.name.en} · ${
+            s.name.zh_hans
+          }</div>`;
+          row.onclick = () => {
+            selectStop(sid);
+            map.panTo([s.lat, s.lng]);
+          };
+          drawerList.appendChild(row);
+        });
+        drawerList.scrollTop = 0;
+        // after building all rows in drawerList...
+        highlightAndScrollSelectedStop();
+        showDrawerMode('route'); // keep drawer in route mode
+        applyDrawerExpanded(); // preserve expanded state
+      }
+
+      // ========= 6) Search =========
+      const searchInput = document.getElementById('searchInput');
+      const searchResults = document.getElementById('searchResults');
+      function querySearch(q) {
+        q = q.trim().toLowerCase();
+        if (!q) return [];
+        const stopMatches = STOPS.filter(
+          (s) =>
+            s.name.zh_hant.includes(q) ||
+            s.name.en.toLowerCase().includes(q) ||
+            s.name.zh_hans.includes(q)
+        ).map((s) => ({
+          type: 'stop',
+          id: s.id,
+          label: s.name.zh_hant,
+          sub: `${s.name.en} · ${s.name.zh_hans}`,
+        }));
+        const routeMatches = ROUTES.filter(
+          (r) =>
+            r.id.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
+        ).map((r) => ({
+          type: 'route',
+          id: r.id,
+          label: `路線 ${r.id}`,
+          sub: r.name,
+        }));
+        return routeMatches.concat(stopMatches).slice(0, 12);
+      }
+      function renderSearchResults(items) {
+        searchResults.innerHTML = '';
+        if (items.length === 0) {
+          searchResults.classList.remove('active');
+          return;
+        }
+        for (const it of items) {
+          const row = document.createElement('div');
+          row.className = 'sr-item';
+          row.innerHTML = `<div class="pill" style="background:${
+            it.type === 'route' ? routeColor(it.id) : '#6b7280'
+          };">${it.type === 'route' ? it.id : '站'}</div>
+                           <div><div>${it.label}</div><div class="sr-muted">${
+            it.sub
+          }</div></div>`;
+          row.onclick = () => {
+            searchResults.classList.remove('active');
+            if (it.type === 'route') selectRoute(it.id);
+            else selectStop(it.id);
+          };
+          searchResults.appendChild(row);
+        }
+        searchResults.classList.add('active');
+      }
+      searchInput.addEventListener('input', () =>
+        renderSearchResults(querySearch(searchInput.value))
+      );
+      document.addEventListener('click', (e) => {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+          searchResults.classList.remove('active');
+        }
+      });
+
+      // ========= 7) Planner (inside modal; results to drawer) =========
+      const openPlanner = document.getElementById('openPlanner');
+      const plannerModal = document.getElementById('plannerModal');
+      const closePlanner = document.getElementById('closePlanner');
+      const startInput = document.getElementById('startInput');
+      const endInput = document.getElementById('endInput');
+      const departDT = document.getElementById('departDT');
+      const planBtn = document.getElementById('planBtn');
+      const planResult = document.getElementById('planResult');
+      const WALK_SVG = `
+      <svg class="walk-icon" width="14" height="14" viewBox="0 0 24 24"
+          fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="5" r="2.2"></circle>
+        <path d="M9.5 21.5c.5 0 .9-.3 1.1-.8l1.8-5.1 2.2 2.2 1.4 3.4c.2.5.6.8 1.1.8.7 0 1.3-.6 1.3-1.3
+                0-.2 0-.4-.1-.5l-1.5-3.6c-.2-.6-.6-1.1-1.1-1.5l-2.1-1.7 1-3.1 1.3.8c.6.4 1.4.2 1.8-.4.4-.6.2-1.4-.4-1.8l-2.2-1.4
+                c-.9-.6-2.1-.6-3.1-.2l-1.6.7c-.6.3-1.1.8-1.3 1.5l-.9 2.8-2.6 2.1c-.5.4-.6 1.3-.2 1.8.4.6 1.3.7 1.8.2l2-1.6-.8 2.6-1.8 5.1
+                c-.1.2-.1.4-.1.5 0 .7.6 1.3 1.3 1.3z"/>
+      </svg>`;
+
+      function attachAutocomplete(input) {
+        const box = document.createElement('div');
+        box.className = 'search-results';
+        box.style.position = 'absolute';
+        box.style.zIndex = '1002';
+        input.parentElement.style.position = 'relative';
+        input.parentElement.appendChild(box);
+        input.addEventListener('input', () => {
+          const items = STOPS.filter(
+            (s) =>
+              s.name.zh_hant.includes(input.value) ||
+              s.name.en.toLowerCase().includes(input.value.toLowerCase()) ||
+              s.name.zh_hans.includes(input.value)
+          ).slice(0, 10);
+          box.innerHTML = '';
+          if (items.length === 0) {
+            box.classList.remove('active');
+            return;
+          }
+          for (const s of items) {
+            const row = document.createElement('div');
+            row.className = 'sr-item';
+            row.innerHTML = `<div class="pill" style="background:#6b7280;">站</div><div>${s.name.zh_hant}<div class="sr-muted">${s.name.en} · ${s.name.zh_hans}</div></div>`;
+            row.onclick = () => {
+              input.value = s.name.zh_hant;
+              input.dataset.stopId = s.id;
+              box.classList.remove('active');
+            };
+            box.appendChild(row);
+          }
+          box.classList.add('active');
+        });
+        document.addEventListener('click', (e) => {
+          if (!box.contains(e.target) && e.target !== input) {
+            box.classList.remove('active');
+          }
+        });
+      }
+      attachAutocomplete(startInput);
+      attachAutocomplete(endInput);
+
+      openPlanner.onclick = () => {
+        plannerModal.classList.add('active');
+        planResult.textContent = '';
+        departDT.value = nowLocalInputValue();
+      };
+      closePlanner.onclick = () => plannerModal.classList.remove('active');
+
+      // adjacency from routes
+      const ADJ = new Map();
+      function addEdge(a, b, route) {
+        if (!ADJ.has(a)) ADJ.set(a, []);
+        if (!ADJ.has(b)) ADJ.set(b, []);
+        ADJ.get(a).push({ to: b, route });
+        ADJ.get(b).push({ to: a, route });
+      }
+      for (const r of ROUTES) {
+        for (let i = 0; i < r.stops.length - 1; i++) {
+          addEdge(r.stops[i], r.stops[i + 1], r.id);
+        }
+      }
+
+      function enumeratePathsK(src, dst, K = 120, maxLen = 16, GRAPH) {
+        const G = GRAPH || ADJ; // fallback if needed
+        const out = [];
+        const visited = new Set([src]);
+
+        function dfs(node, path, segs) {
+          if (path.length > maxLen) return;
+          if (node === dst) {
+            out.push({ nodes: path.slice(), segments: segs.slice() });
+            return;
+          }
+          // WALK edges first so “just walk there” gets found early
+          const nbrs = (G.get(node) || []).slice().sort((a, b) => {
+            const aw = a.route === 'WALK',
+              bw = b.route === 'WALK';
+            return aw === bw ? 0 : aw ? -1 : 1;
+          });
+
+          for (const e of nbrs) {
+            const nxt = e.to;
+            if (visited.has(nxt)) continue;
+            visited.add(nxt);
+            path.push(nxt);
+            segs.push({
+              from: node,
+              to: nxt,
+              route: e.route,
+              walkMins: e.walkMins || 0,
+            });
+            dfs(nxt, path, segs);
+            segs.pop();
+            path.pop();
+            visited.delete(nxt);
+            if (out.length >= K) return;
+          }
+        }
+
+        dfs(src, [src], []);
+        return out;
+      }
+
+      function geoDistanceLeg(fromId, toId) {
+        const A = STOP_BY_ID[fromId],
+          B = STOP_BY_ID[toId];
+        const dx = B.lat - A.lat,
+          dy = B.lng - A.lng;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      function sameBaseLine(a, b) {
+        if (a === 'WALK' || b === 'WALK') return false;
+        const ra = ROUTE_BY_ID[a],
+          rb = ROUTE_BY_ID[b];
+        const la = ra?.line || a.replace(/\*$/, ''),
+          lb = rb?.line || b.replace(/\*$/, '');
+        return la === lb && a !== b; // transfer between variants of same line (e.g., 8 → 8*)
+      }
+
+      function evaluatePath(path, departDate) {
+        // collapse contiguous segments with same route (including WALK)
+        const legs = [];
+        let cur = null,
+          startId = path.nodes[0],
+          walkAcc = 0;
+        for (const seg of path.segments) {
+          if (cur === null) {
+            cur = seg.route;
+            startId = seg.from;
+            walkAcc = seg.walkMins || 0;
+            continue;
+          }
+          if (seg.route === cur) {
+            if (cur === 'WALK') walkAcc += seg.walkMins || 0;
+            continue;
+          }
+          legs.push({
+            route: cur,
+            from: startId,
+            to: seg.from,
+            walkMins: cur === 'WALK' ? walkAcc : 0,
+          });
+          cur = seg.route;
+          startId = seg.from;
+          walkAcc = cur === 'WALK' ? seg.walkMins || 0 : 0;
+        }
+        if (cur)
+          legs.push({
+            route: cur,
+            from: startId,
+            to: path.nodes.at(-1),
+            walkMins: cur === 'WALK' ? walkAcc : 0,
+          });
+
+        // forbid transfer on same base line
+        for (let i = 0; i < legs.length - 1; i++) {
+          if (sameBaseLine(legs[i].route, legs[i + 1].route))
+            return { skip: true };
+        }
+
+        // timing
+        let t = minutesInDay(departDate);
+        let curDate = new Date(departDate);
+        const detailed = [];
+        let totalWait = 0,
+          totalRide = 0,
+          totalWalk = 0;
+
+        for (const L of legs) {
+          let tm;
+          if (L.route === 'WALK') {
+            tm = computeLegTiming(
+              'WALK',
+              L.from,
+              L.to,
+              curDate,
+              t,
+              L.walkMins || 0
+            );
+          } else {
+            tm = computeLegTiming(L.route, L.from, L.to, curDate, t);
+          }
+          if (tm.unavailable) return { skip: true };
+          detailed.push({ ...L, ...tm });
+          totalWait += tm.wait;
+          totalRide += tm.ride;
+          totalWalk += tm.walk || 0;
+          t = tm.arrive;
+        }
+
+        // transfers: ONLY between bus legs; walking doesn't count
+        const busLegs = detailed.filter((l) => l.route !== 'WALK').length;
+        const transfers = Math.max(0, busLegs - 1);
+        if (transfers > 2) return { skip: true };
+        if (totalWalk > 10) return { skip: true }; // ≤ 10 mins walk total
+
+        const totalMinutes = totalWait + totalRide + totalWalk;
+        const totalDist = path.nodes
+          .slice(0, -1)
+          .reduce((d, sid, i) => d + geoDistanceLeg(sid, path.nodes[i + 1]), 0);
+
+        return {
+          legs: detailed,
+          transfers,
+          totalMinutes,
+          totalWait,
+          totalRide,
+          totalWalk,
+          totalDist,
+          nodes: path.nodes,
+          skip: false,
+        };
+      }
+
+      // Drawer itinerary rendering
+      const drawerItinList = document.getElementById('drawerItinList');
+      const drawerItinSteps = document.getElementById('drawerItinSteps');
+      let currentItins = [],
+        currentItinIndex = 0;
+
+      function renderItineraries() {
+        const arrow = '<span style="opacity:.6;margin:0 4px">></span>';
+        drawerItinList.innerHTML = '';
+
+        currentItins.forEach((it, idx) => {
+          const parts = [`總時間 ${Math.round(it.totalMinutes)} 分`];
+          if (it.transfers > 0) parts.push(`轉乘 ${it.transfers} 次`);
+          if (it.totalWalk > 0)
+            parts.push(`步行 ${Math.round(it.totalWalk)} 分`);
+          const title = parts.join(' · ');
+
+          const chain = it.legs
+            .map((l) =>
+              l.route === 'WALK'
+                ? WALK_SVG
+                : `<span class="pill" style="background:${routeColor(
+                    l.route
+                  )}">${l.route}</span>`
+            )
+            .join(arrow);
+
+          const card = document.createElement('div');
+          card.className = 'itin-card';
+          card.dataset.index = String(idx);
+          card.innerHTML = `
+              <div class="itin-head">
+                <div class="itin-title">${title}</div>
+                <div class="itin-sub">${chain}</div>
+              </div>
+              <div class="itin-details" style="display:none"></div>
+            `;
+          card.onclick = () => selectItinerary(idx);
+          drawerItinList.appendChild(card);
+        });
+      }
+
+      function detailsHTML(it) {
+        const depart0 =
+          it.legs[0]?.depart != null ? toHHMM(it.legs[0].depart) : '—';
+        const arriveN =
+          it.legs.at(-1)?.arrive != null ? toHHMM(it.legs.at(-1).arrive) : '—';
+
+        const head = [
+          `出發 ${depart0}`,
+          `等待 ${Math.round(it.totalWait)} 分`,
+          `車程 ${Math.round(it.totalRide)} 分`,
+        ];
+        if (it.totalWalk > 0) head.push(`步行 ${Math.round(it.totalWalk)} 分`);
+        head.push(`抵達 ${arriveN}`);
+
+        const rows = it.legs
+          .map((l, k) => {
+            if (l.route === 'WALK') {
+              return `<div class="detail">#${k + 1}. ${WALK_SVG}
+              ${STOP_BY_ID[l.from].name.zh_hant} (${toHHMM(l.depart)}) →
+              ${STOP_BY_ID[l.to].name.zh_hant} (${toHHMM(
+                l.arrive
+              )}) · ${Math.round(l.walk)} 分</div>`;
+            } else {
+              return `<div class="detail">#${
+                k + 1
+              }. <span class="pill" style="background:${routeColor(l.route)}">${
+                l.route
+              }</span>
+              ${STOP_BY_ID[l.from].name.zh_hant} (${toHHMM(l.depart)}) →
+              ${STOP_BY_ID[l.to].name.zh_hant} (${toHHMM(
+                l.arrive
+              )}) · ${Math.round(l.ride)} 分</div>`;
+            }
+          })
+          .join('');
+
+        return `<div class="summary">${head.join(' · ')}</div>${rows}`;
+      }
+
+      function selectItinerary(i) {
+        currentItinIndex = i;
+
+        // toggle selected class
+        const cards = Array.from(drawerItinList.querySelectorAll('.itin-card'));
+        cards.forEach((el, k) => el.classList.toggle('selected', k === i));
+
+        // auto expand overlay in planning view
+        drawerExpanded = true;
+        applyDrawerExpanded();
+
+        // clear all details, then open only the selected card
+        cards.forEach((el) => {
+          const box = el.querySelector('.itin-details');
+          if (box) {
+            box.style.display = 'none';
+            box.innerHTML = '';
+          }
+        });
+
+        const it = currentItins[i];
+        const selectedCard = cards[i];
+        const detailsBox = selectedCard.querySelector('.itin-details');
+        if (detailsBox) {
+          detailsBox.innerHTML = detailsHTML(it);
+          detailsBox.style.display = 'block';
+        }
+      }
+
+      // ===== Walking groups =====
+      const GROUPS = {
+        G1: ['T1', 'T2', 'T3', 'S1'],
+        G2: ['U2', 'U3'],
+        G3: ['U5', 'D3'],
+        G4: ['U6', 'U7'],
+        G5: ['B1', 'B7'],
+        G6: ['W2', 'W3', 'B3'],
+        G7: ['W4', 'W5'],
+        G8: ['U1', 'D1'],
+      };
+      // per-group walking time (mins)
+      const GROUP_TIME = {
+        G1: 3,
+        G2: 1,
+        G3: 1,
+        G4: 1,
+        G5: 1,
+        G6: 1,
+        G7: 1,
+        G8: 1,
+      };
+
+      // special cross-group links: stop ↔ all stops in a group
+      const SPECIAL_WALKS = [
+        { from: 'X3', toGroup: 'G1', minutes: 5 },
+        { from: 'D2', toGroup: 'G2', minutes: 4 },
+        { from: 'B6', toGroup: 'G5', minutes: 4 },
+        { from: 'W1', toGroup: 'G6', minutes: 5 },
+        { from: 'X1', toGroup: 'G7', minutes: 3 },
+      ];
+
+      function buildGraphFor(date) {
+        const nowMin = minutesInDay(date);
+
+        const eligible = new Set(
+          ROUTES.filter((r) => {
+            if (!routeRunsOn(r, date)) return false;
+            const deps = getDeparturesForDate(r, date);
+            return deps.some((t) => toMin(t) >= nowMin);
+          }).map((r) => r.id)
+        );
+
+        const G = new Map();
+        const add = (a) => {
+          if (!G.has(a)) G.set(a, []);
+        };
+
+        function addWalk(a, b, mins) {
+          add(a);
+          add(b);
+          // walking first in adjacency: unshift
+          G.get(a).unshift({ to: b, route: 'WALK', walkMins: mins });
+          G.get(b).unshift({ to: a, route: 'WALK', walkMins: mins });
+        }
+
+        function addBus(a, b, route) {
+          if (!eligible.has(route)) return;
+          add(a);
+          add(b);
+          G.get(a).push({ to: b, route });
+          G.get(b).push({ to: a, route });
+        }
+
+        // --- 1) Walking edges first
+        for (const gid of Object.keys(GROUPS)) {
+          const S = GROUPS[gid],
+            t = GROUP_TIME[gid] ?? 1;
+          for (let i = 0; i < S.length; i++) {
+            for (let j = i + 1; j < S.length; j++) addWalk(S[i], S[j], t);
+          }
+        }
+        for (const { from, toGroup, minutes } of SPECIAL_WALKS) {
+          for (const to of GROUPS[toGroup] || []) addWalk(from, to, minutes);
+        }
+
+        // --- 2) Then bus edges
+        for (const r of ROUTES) {
+          for (let i = 0; i < r.stops.length - 1; i++) {
+            addBus(r.stops[i], r.stops[i + 1], r.id);
+          }
+        }
+
+        return G;
+      }
+
+      // Helper: slice contiguous nodes by route indices
+      function nodesBetweenByIdx(routeId, i, j) {
+        return ROUTE_BY_ID[routeId].stops.slice(i, j + 1);
+      }
+
+      function queryDateFromStartMin(baseDate, startMin) {
+        const d = new Date(baseDate);
+        d.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+        return d;
+      }
+
+      // direct walking minutes between two stops (single-step only: groups & specials)
+      function walkMinutesAB(a, b, GRAPH) {
+        const e = (GRAPH.get(a) || []).find(
+          (x) => x.to === b && x.route === 'WALK'
+        );
+        return e ? e.walkMins || 0 : Infinity;
+      }
+      function walkNeighborsOneStep(a, GRAPH) {
+        return (GRAPH.get(a) || [])
+          .filter((e) => e.route === 'WALK')
+          .map((e) => e.to);
+      }
+      function nodesBetweenByIdx(routeId, i, j) {
+        return ROUTE_BY_ID[routeId].stops.slice(i, j + 1);
+      }
+
+      // Compute one leg timing (same-day), returns {wait, ride, depart, arrive, unavailable}
+      function computeLegTiming(
+        routeId,
+        fromId,
+        toId,
+        baseDate,
+        startMin,
+        walkMins = 0
+      ) {
+        if (routeId === 'WALK') {
+          const depart = startMin;
+          const arrive = startMin + walkMins;
+          return {
+            wait: 0,
+            ride: 0,
+            walk: walkMins,
+            depart,
+            arrive,
+            unavailable: false,
+          };
+        }
+
+        const r = ROUTE_BY_ID[routeId];
+        if (!r || !routeRunsOn(r, baseDate)) return { unavailable: true };
+        const qDate = queryDateFromStartMin(baseDate, startMin);
+        const nd = nextDepartureAtStopAfter(routeId, fromId, qDate, true);
+        if (!nd) return { unavailable: true };
+        const ride = travelMinutes(routeId, fromId, toId);
+        if (!isFinite(ride)) return { unavailable: true };
+        return {
+          wait: Math.max(0, nd.time - startMin),
+          ride,
+          walk: 0,
+          depart: nd.time,
+          arrive: nd.time + ride,
+          unavailable: false,
+        };
+      }
+
+      // Build 0-transfer plans
+      function buildDirectPlans(s, t, baseDate) {
+        const startMin = minutesInDay(baseDate);
+        const out = [];
+        const atS = STOP_TO_ROUTES.get(s) || [];
+        const atTAll = STOP_TO_ROUTES.get(t) || [];
+
+        for (const { routeId, idx: i } of atS) {
+          const atTSame = atTAll.filter((x) => x.routeId === routeId);
+          for (const { idx: j } of atTSame) {
+            if (j <= i) continue; // must go forward along the route
+            const leg1 = computeLegTiming(routeId, s, t, baseDate, startMin);
+            const nodes = nodesBetweenByIdx(routeId, i, j);
+            const totalDist = nodes
+              .slice(0, -1)
+              .reduce(
+                (d, sid, k) => d + geoDistanceLeg(nodes[k], nodes[k + 1]),
+                0
+              );
+            const totalMinutes = isFinite(leg1.wait + leg1.ride)
+              ? leg1.wait + leg1.ride
+              : Infinity;
+            const unavailable = leg1.unavailable ? [routeId] : [];
+            out.push({
+              legs: [{ ...leg1, route: routeId, from: s, to: t }],
+              transfers: 0,
+              totalMinutes,
+              totalDist,
+              unavailable,
+              nodes,
+            });
+          }
+        }
+        return out;
+      }
+
+      // Build 1-transfer plans
+      function buildOneTransferPlans(s, t, baseDate) {
+        const out = [];
+        const sig = new Set(); // dedupe
+        const startMin0 = minutesInDay(baseDate);
+        const atS = STOP_TO_ROUTES.get(s) || [];
+
+        for (const { routeId: r1id, idx: i } of atS) {
+          const r1 = ROUTE_BY_ID[r1id];
+          if (!routeRunsOn(r1, baseDate)) continue;
+
+          // Consider transfer at any downstream stop u on r1 after s
+          for (let k = i + 1; k < r1.stops.length; k++) {
+            const u = r1.stops[k];
+
+            // Routes that visit u and can reach t forward
+            const atU = STOP_TO_ROUTES.get(u) || [];
+            for (const { routeId: r2id, idx: uPos } of atU) {
+              const r2 = ROUTE_BY_ID[r2id];
+              if (!routeRunsOn(r2, baseDate)) continue;
+
+              const atT = STOP_TO_ROUTES.get(t) || [];
+              const tCandidates = atT.filter(
+                (x) => x.routeId === r2id && x.idx > uPos
+              );
+              if (tCandidates.length === 0) continue;
+
+              for (const { idx: tPos } of tCandidates) {
+                const key = `${r1id}:${s}->${u}|${r2id}:${u}->${t}`;
+                if (sig.has(key)) continue;
+                sig.add(key);
+
+                // Leg 1: s -> u on r1
+                const leg1 = computeLegTiming(r1id, s, u, baseDate, startMin0);
+                if (leg1.unavailable) {
+                  out.push({
+                    legs: [
+                      { route: r1id, from: s, to: u, ...leg1 },
+                      { route: r2id, from: u, to: t, unavailable: true },
+                    ],
+                    transfers: 1,
+                    totalMinutes: Infinity,
+                    totalDist: Infinity,
+                    unavailable: [r1id, r2id],
+                    nodes: [],
+                  });
+                  continue;
+                }
+
+                // Leg 2: u -> t on r2 (start at arrival of leg1)
+                const leg2 = computeLegTiming(
+                  r2id,
+                  u,
+                  t,
+                  baseDate,
+                  leg1.arrive
+                );
+                const nodes1 = nodesBetweenByIdx(r1id, i, k);
+                const nodes2 = nodesBetweenByIdx(r2id, uPos, tPos);
+                const nodes = nodes1.concat(nodes2.slice(1)); // avoid duplicating u
+                const totalDist = nodes
+                  .slice(0, -1)
+                  .reduce(
+                    (d, sid, m) => d + geoDistanceLeg(nodes[m], nodes[m + 1]),
+                    0
+                  );
+
+                const totalMinutes = leg2.unavailable
+                  ? Infinity
+                  : leg1.wait + leg1.ride + leg2.wait + leg2.ride;
+
+                const unavailable = []
+                  .concat(leg1.unavailable ? [r1id] : [])
+                  .concat(leg2.unavailable ? [r2id] : []);
+
+                out.push({
+                  legs: [
+                    { ...leg1, route: r1id, from: s, to: u },
+                    { ...leg2, route: r2id, from: u, to: t },
+                  ],
+                  transfers: 1,
+                  totalMinutes,
+                  totalDist,
+                  unavailable,
+                  nodes,
+                });
+              }
+            }
+          }
+        }
+        return out;
+      }
+
+      // Ranking: put direct first unless a transfer is strictly faster
+      const SAVINGS_THRESHOLD_MIN = 4;
+
+      function rankPlans(plans) {
+        const finite = plans.filter((p) => isFinite(p.totalMinutes));
+        const bestDirect = finite
+          .filter((p) => p.transfers === 0)
+          .reduce((m, p) => Math.min(m, p.totalMinutes), Infinity);
+
+        return plans.slice().sort((A, B) => {
+          const group = (p) => {
+            if (bestDirect === Infinity) return 0; // no direct → pure time
+            // only show before directs if saves ≥ threshold
+            if (p.totalMinutes <= bestDirect - SAVINGS_THRESHOLD_MIN) return 0;
+            if (p.transfers === 0) return 1;
+            return 2;
+          };
+          const gA = group(A),
+            gB = group(B);
+          if (gA !== gB) return gA - gB;
+          if (A.totalMinutes !== B.totalMinutes)
+            return A.totalMinutes - B.totalMinutes;
+          if (A.transfers !== B.transfers) return A.transfers - B.transfers;
+          return A.totalDist - B.totalDist;
+        });
+      }
+      // Return up to 3 best plans that use at most one bus leg (walk before/after allowed)
+      // Priority: direct WALK first (if exists), then bus±walk combos sorted by total minutes
+      function findZeroTransferPlans(s, t, baseDate, GRAPH) {
+        const G = GRAPH; // already built by buildGraphFor(depDate)
+        const startMin0 = minutesInDay(baseDate);
+
+        const MAX_MINUTES = 60; // do not list plans longer than 60 minutes
+        const LIMIT = 5; // show at most 5 plans
+        const THRESHOLD = 4; // walk→bus must save >4 mins to beat direct bus
+
+        // --- helpers (single-step walking graph only) ---
+        const walkMinutesAB = (a, b) => {
+          const e = (G.get(a) || []).find(
+            (x) => x.to === b && x.route === 'WALK'
+          );
+          return e ? e.walkMins || 0 : Infinity;
+        };
+        const walkNeighborsOneStep = (a) =>
+          (G.get(a) || []).filter((e) => e.route === 'WALK').map((e) => e.to);
+
+        const isWalkOnly = (p) =>
+          p.legs.length === 1 && p.legs[0].route === 'WALK';
+        const isBusOnly = (p) =>
+          p.legs.length === 1 && p.legs[0].route !== 'WALK';
+        const isBusPlusWalk = (p) => !isWalkOnly(p) && !isBusOnly(p);
+
+        const plans = [];
+
+        // --- A) Direct WALK (first-class citizen) ---
+        {
+          const w = walkMinutesAB(s, t);
+          if (isFinite(w)) {
+            const leg = computeLegTiming('WALK', s, t, baseDate, startMin0, w);
+            const totalMinutes = leg.walk || 0;
+            if (totalMinutes <= MAX_MINUTES) {
+              plans.push({
+                legs: [{ ...leg, route: 'WALK', from: s, to: t }],
+                transfers: 0,
+                totalMinutes,
+                totalWait: 0,
+                totalRide: 0,
+                totalWalk: leg.walk || 0,
+                totalDist: geoDistanceLeg(s, t),
+                nodes: [s, t],
+                skip: false,
+              });
+            }
+          }
+        }
+
+        // --- B) Zero-transfer bus ± walk (walk before and/or after) ---
+        const S_s = [s, ...walkNeighborsOneStep(s)];
+        const S_t = [t, ...walkNeighborsOneStep(t)];
+
+        for (const vs of S_s) {
+          const preWalk = vs === s ? 0 : walkMinutesAB(s, vs);
+          if (!isFinite(preWalk)) continue;
+
+          for (const { routeId, idx: i } of STOP_TO_ROUTES.get(vs) || []) {
+            const r = ROUTE_BY_ID[routeId];
+            if (!r || !routeRunsOn(r, baseDate)) continue;
+
+            for (const vt of S_t) {
+              const postWalk = vt === t ? 0 : walkMinutesAB(vt, t);
+              if (!isFinite(postWalk) && vt !== t) continue;
+
+              // vt must be downstream of vs on the SAME route
+              const hitsAtT = (STOP_TO_ROUTES.get(vt) || []).filter(
+                (x) => x.routeId === routeId && x.idx > i
+              );
+              for (const { idx: j } of hitsAtT) {
+                // Leg 1: optional pre-walk
+                const legWalk1 = preWalk
+                  ? computeLegTiming(
+                      'WALK',
+                      s,
+                      vs,
+                      baseDate,
+                      startMin0,
+                      preWalk
+                    )
+                  : null;
+                const startMin1 = preWalk ? legWalk1.arrive : startMin0;
+
+                // Leg 2: bus
+                const legBus = computeLegTiming(
+                  routeId,
+                  vs,
+                  vt,
+                  baseDate,
+                  startMin1
+                );
+                if (legBus.unavailable) continue;
+
+                // Leg 3: optional post-walk
+                const legWalk2 = postWalk
+                  ? computeLegTiming(
+                      'WALK',
+                      vt,
+                      t,
+                      baseDate,
+                      legBus.arrive,
+                      postWalk
+                    )
+                  : null;
+
+                const legs = [];
+                if (legWalk1)
+                  legs.push({ ...legWalk1, route: 'WALK', from: s, to: vs });
+                legs.push({ ...legBus, route: routeId, from: vs, to: vt });
+                if (legWalk2)
+                  legs.push({ ...legWalk2, route: 'WALK', from: vt, to: t });
+
+                const nodes = ROUTE_BY_ID[routeId].stops.slice(i, j + 1);
+                const totalDist = nodes
+                  .slice(0, -1)
+                  .reduce(
+                    (d, sid, k) => d + geoDistanceLeg(nodes[k], nodes[k + 1]),
+                    0
+                  );
+
+                const totalWait = legBus.wait; // walking legs don't add "wait"
+                const totalRide = legBus.ride;
+                const totalWalk = (legWalk1?.walk || 0) + (legWalk2?.walk || 0);
+                const totalMinutes = totalWait + totalRide + totalWalk;
+
+                if (totalMinutes <= MAX_MINUTES) {
+                  plans.push({
+                    legs,
+                    transfers: 0, // ✅ walk+bus still counts as 0 transfer
+                    totalMinutes,
+                    totalWait,
+                    totalRide,
+                    totalWalk,
+                    totalDist,
+                    nodes: [s, ...nodes, t],
+                    skip: false,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        // --- Deduplicate by leg signature ---
+        const seen = new Set();
+        const uniq = [];
+        for (const p of plans) {
+          const sig = p.legs
+            .map((l) => `${l.route}:${l.from}->${l.to}`)
+            .join('|');
+          if (seen.has(sig)) continue;
+          seen.add(sig);
+          uniq.push(p);
+        }
+
+        // --- Rank:
+        //  1) Direct WALK always first (if present)
+        //  2) Direct BUS vs BUS+WALK:
+        //     - Prefer DIRECT BUS, unless BUS+WALK saves > THRESHOLD (4) minutes compared to best direct bus.
+        //  3) Then by totalMinutes, then by totalDist.
+        const bestBusOnly = uniq.reduce(
+          (m, p) => (isBusOnly(p) && p.totalMinutes < m ? p.totalMinutes : m),
+          Infinity
+        );
+
+        uniq.sort((A, B) => {
+          const Awalk = isWalkOnly(A),
+            Bwalk = isWalkOnly(B);
+          if (Awalk !== Bwalk) return Awalk ? -1 : 1;
+
+          const AbusOnly = isBusOnly(A),
+            BbusOnly = isBusOnly(B);
+          const AbusWalk = isBusPlusWalk(A),
+            BbusWalk = isBusPlusWalk(B);
+
+          // Direct bus vs bus+walk with 4-min saving exception
+          if (AbusOnly && BbusWalk) {
+            // Put B before A only if B saves > THRESHOLD vs the best direct bus
+            if (B.totalMinutes <= bestBusOnly - THRESHOLD) return 1; // B first
+            return -1; // A first (direct bus)
+          }
+          if (AbusWalk && BbusOnly) {
+            if (A.totalMinutes <= bestBusOnly - THRESHOLD) return -1; // A first
+            return 1; // B first (direct bus)
+          }
+
+          // Final tie-breakers
+          if (A.totalMinutes !== B.totalMinutes)
+            return A.totalMinutes - B.totalMinutes;
+          if (A.totalWait !== B.totalWait) return A.totalWait - B.totalWait;
+          if (A.totalWalk !== B.totalWalk) return A.totalWalk - B.totalWalk;
+          return A.totalDist - B.totalDist;
+        });
+
+        return uniq.slice(0, LIMIT);
+      }
+
+      // Main: compute up to 3 best plans
+      function findBestPlans(s, t, baseDate, GRAPH) {
+        const startMin = minutesInDay(baseDate);
+
+        const walkMinutes = (a, b) => {
+          const e = (GRAPH.get(a) || []).find(
+            (x) => x.to === b && x.route === 'WALK'
+          );
+          return e ? e.walkMins || 0 : Infinity;
+        };
+
+        // 1) DFS-generated candidates
+        const raw = enumeratePathsK(s, t, 120, 16, GRAPH);
+        const evaled = raw
+          .map((p) => evaluatePath(p, baseDate))
+          .filter(
+            (p) =>
+              p &&
+              !p.skip &&
+              Number.isFinite(p.totalMinutes) &&
+              p.totalMinutes <= 60
+          );
+
+        // 2) Direct-WALK fallback (guarantee T1 → T3 type)
+        const directWalkCand = (() => {
+          const w = walkMinutes(s, t);
+          if (!isFinite(w)) return null;
+          const leg = computeLegTiming('WALK', s, t, baseDate, startMin, w);
+          return {
+            legs: [{ ...leg, route: 'WALK', from: s, to: t }],
+            transfers: 0,
+            totalMinutes: leg.wait + leg.ride + (leg.walk || 0),
+            totalWalk: leg.walk || 0,
+            totalRide: 0,
+            totalWait: 0,
+            totalDist: geoDistanceLeg(s, t),
+            nodes: [s, t],
+            skip: false,
+          };
+        })();
+
+        // 3) Best bus → walk fallback (guarantee T1 → U2 →(walk)→ U3 type)
+        const busThenWalkCand = (() => {
+          let best = null;
+          const atS = STOP_TO_ROUTES.get(s) || [];
+          for (const { routeId, idx: i } of atS) {
+            const r = ROUTE_BY_ID[routeId];
+            if (!r || !routeRunsOn(r, baseDate)) continue;
+
+            for (let j = i + 1; j < r.stops.length; j++) {
+              const u = r.stops[j];
+              const w = walkMinutes(u, t);
+              if (!isFinite(w)) continue;
+
+              const leg1 = computeLegTiming(routeId, s, u, baseDate, startMin);
+              if (leg1.unavailable) continue;
+
+              const leg2 = computeLegTiming(
+                'WALK',
+                u,
+                t,
+                baseDate,
+                leg1.arrive,
+                w
+              );
+              const totalMinutes = leg1.wait + leg1.ride + (leg2.walk || 0);
+
+              const nodes = nodesBetweenByIdx(routeId, i, j).concat([t]);
+              const totalDist = nodes
+                .slice(0, -1)
+                .reduce(
+                  (d, sid, k) => d + geoDistanceLeg(nodes[k], nodes[k + 1]),
+                  0
+                );
+
+              const cand = {
+                legs: [
+                  { ...leg1, route: routeId, from: s, to: u },
+                  { ...leg2, route: 'WALK', from: u, to: t },
+                ],
+                transfers: 1,
+                totalMinutes,
+                totalWait: leg1.wait,
+                totalRide: leg1.ride,
+                totalWalk: leg2.walk || 0,
+                totalDist,
+                nodes,
+                skip: false,
+              };
+              if (!best || totalMinutes < best.totalMinutes) best = cand;
+            }
+          }
+          return best;
+        })();
+
+        // Combine + de-duplicate by leg signature
+        const all = [...evaled];
+        if (directWalkCand) all.push(directWalkCand);
+        if (busThenWalkCand) all.push(busThenWalkCand);
+
+        const seen = new Set(),
+          uniq = [];
+        for (const p of all) {
+          const sig = p.legs
+            .map((l) => `${l.route}:${l.from}->${l.to}`)
+            .join('|');
+          if (seen.has(sig)) continue;
+          seen.add(sig);
+          uniq.push(p);
+        }
+
+        const ranked = rankPlans(uniq);
+        return ranked.slice(0, 3);
+      }
+
+      planBtn.onclick = () => {
+        const tryResolve = (input) => {
+          if (input.dataset.stopId) return input.dataset.stopId;
+          const txt = (input.value || '').trim();
+          const hit = STOPS.find(
+            (s) =>
+              s.name.zh_hant === txt ||
+              s.name.en.toLowerCase() === txt.toLowerCase() ||
+              s.name.zh_hans === txt
+          );
+          return hit ? hit.id : null;
+        };
+
+        const s = tryResolve(startInput);
+        const t = tryResolve(endInput);
+        lastPlanFromId = s;
+        lastPlanToId = t;
+
+        if (!s || !t) {
+          planResult.textContent = '請選擇起點與終點站';
+          return;
+        }
+
+        const depDate = parseDT(departDT);
+        const graph = buildGraphFor(depDate);
+        const itinSummary = document.getElementById('itinSummary');
+        if (itinSummary) {
+          itinSummary.style.display = '';
+          itinSummary.innerHTML = `
+            <div class="itin-title">${zhStopLabel(
+              lastPlanFromId
+            )} → ${zhStopLabel(lastPlanToId)}</div>
+          `;
+        }
+
+        // NEW: only search zero-transfer first (bus±walk)
+        let best = findZeroTransferPlans(s, t, depDate, graph);
+
+        // Optional fallback to your existing enumerator if strictly needed:
+        if (best.length === 0) {
+          // const fallback = findBestPlans(s, t, depDate, graph);
+          // best = fallback;
+        }
+
+        if (best.length === 0) {
+          planResult.textContent = '找不到可行路線（60 分鐘內）';
+          return;
+        }
+
+        currentItins = best;
+
+        showDrawerMode('itin');
+
+        drawerTitle.textContent = '建議路線';
+        drawerPill.classList.add('icon-mode');
+        drawerPill.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+            <path d="M6.14214 6.14214C8.90356 3.38071 10.2843 2 12 2C13.7157 2 15.0964 3.38071 17.8579 6.14214C20.6193 8.90356 22 10.2843 22 12C22 13.7157 20.6193 15.0964 17.8579 17.8579C15.0964 20.6193 13.7157 22 12 22C10.2843 22 8.90356 20.6193 6.14214 17.8579C3.38071 15.0964 2 13.7157 2 12C2 10.2843 3.38071 8.90356 6.14214 6.14214Z"></path>
+            <path d="M16 11.5L13.3333 9M16 11.5L13.3333 14M16 11.5L10.6667 11.5C9.77778 11.5 8 12 8 14"></path>
+          </svg>
+        `;
+
+        drawerExpanded = false;
+        applyDrawerExpanded();
+        renderItineraries();
+        drawerItinList.scrollTop = 0;
+
+        plannerModal.classList.remove('active');
+      };
+
+      // ========= Theme toggle (3d) =========
+      (function () {
+        const saved = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute(
+          'data-theme',
+          saved === 'light' ? 'light' : 'dark'
+        );
+        const light = saved === 'light';
+        if (iconSun) iconSun.style.display = light ? 'none' : '';
+        if (iconMoon) iconMoon.style.display = light ? '' : 'none';
+        applyMapTheme(true);
+      })();
+
+      if (themeToggle) {
+        themeToggle.onclick = () => {
+          const cur =
+            document.documentElement.getAttribute('data-theme') || 'dark';
+          const next = cur === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', next);
+          localStorage.setItem('theme', next);
+          const light = next === 'light';
+          if (iconSun) iconSun.style.display = light ? 'none' : '';
+          if (iconMoon) iconMoon.style.display = light ? '' : 'none';
+          applyMapTheme(true);
+        };
+      }
+
+      const toggleInactiveBadges = document.getElementById(
+        'toggleInactiveBadges'
+      );
+      const eyeOn = document.getElementById('eyeOn');
+      const eyeOff = document.getElementById('eyeOff');
+
+      function setInactiveIcon() {
+        if (HIDE_INACTIVE_BADGES) {
+          // hiding inactive => show "eye-off"
+          if (eyeOff) eyeOff.style.display = '';
+          if (eyeOn) eyeOn.style.display = 'none';
+          if (toggleInactiveBadges)
+            toggleInactiveBadges.title = '顯示未營運路線徽章';
+        } else {
+          // showing inactive => show "eye"
+          if (eyeOff) eyeOff.style.display = 'none';
+          if (eyeOn) eyeOn.style.display = '';
+          if (toggleInactiveBadges)
+            toggleInactiveBadges.title = '隱藏未營運路線徽章';
+        }
+      }
+
+      if (toggleInactiveBadges) {
+        toggleInactiveBadges.onclick = () => {
+          HIDE_INACTIVE_BADGES = !HIDE_INACTIVE_BADGES;
+          setInactiveIcon(); // update icon + tooltip
+          refreshAllMarkers(); // re-render badges
+        };
+        setInactiveIcon(); // initial state sync
+      }
+
+      // Also re-render markers when the "查詢時間" changes
+      nowControl.addEventListener('change', refreshAllMarkers);
+
+      // ========= 8) Defaults =========
+      updateDayFlagsByDate(new Date());
+      initMarkers(); // <-- build markers now that inputs exist
+      refreshAllMarkers(); // first paint with correct badges
+      selectStop('T1');
+    </script>
+  </body>
+</html>
