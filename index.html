@@ -2432,56 +2432,91 @@
         const refDate = parseDT(nowControl);
         const nowMin = minutesInDay(refDate);
 
-        if (stop.id === 'S1') {
-          const rid = 'Terminal';
-          const r = ROUTE_BY_ID[rid];
-          let activeNow = true;
+        const MUTUAL_GROUPS = [
+          ['2', '2*'],
+          ['N', 'N*'],
+          ['H', 'H*'],
+        ];
 
-          if (r && routeRunsOn(r, refDate)) {
-            const deps = getDeparturesForDate(r, refDate);
-            if (deps.length) {
-              const first = toMin(deps[0]);
-              const last = toMin(deps[deps.length - 1]);
+        function getMutualActivePeriod(groupIds, stopId, date) {
+          let firstArrive = Infinity, lastArrive = -Infinity, hasService = false;
+          for (const rid of groupIds) {
+            const r = ROUTE_BY_ID[rid];
+            if (!r) continue;
+            if (!routeRunsOn(r, date)) continue;
+            const idxs = [];
+            for (let i = 0; i < r.stops.length; i++)
+              if (r.stops[i] === stopId) idxs.push(i);
+            if (idxs.length === 0) continue;
+            const deps = getDeparturesForDate(r, date);
+            if (!deps.length) continue;
+            hasService = true;
+            for (const i of idxs) {
+              const off = r.stopOffsets?.[i];
+              if (off == null) continue;
+              for (const dep of deps) {
+                const arr = toMin(dep) + off;
+                if (arr < firstArrive) firstArrive = arr;
+                if (arr > lastArrive) lastArrive = arr;
+              }
             }
           }
-
-          // respect the "hide inactive" toggle; grey if shown but inactive
-          const pills =
-            !HIDE_INACTIVE_BADGES || activeNow
-              ? `<span class="pill" style="background:${'#00aa86'};">Terminal</span>`
-              : '';
-
-          return `
-            <svg class="pin-svg" viewBox="0 0 56 64" aria-hidden="true">
-              <circle class="pin-fill" cx="28" cy="45" r="7"></circle>
-              <path class="pin-fill" d="M22 54 L34 54 L28 64 Z"></path>
-            </svg>
-            <div class="badge-row">${pills}</div>
-          `;
+          if (!hasService || !isFinite(firstArrive) || !isFinite(lastArrive)) return null;
+          return {
+            start: Math.max(0, firstArrive - 20),
+            end: lastArrive,
+          };
         }
 
-        const badges = summarizeRouteBadges(stop.routes, stop.id)
+        function getRouteActivePeriod(route, stopId, date) {
+          if (!routeRunsOn(route, date)) return null;
+          const idxs = [];
+          for (let i = 0; i < route.stops.length; i++)
+            if (route.stops[i] === stopId) idxs.push(i);
+          if (idxs.length === 0) return null;
+          const deps = getDeparturesForDate(route, date);
+          if (!deps.length) return null;
+          let firstArrive = Infinity, lastArrive = -Infinity;
+          for (const i of idxs) {
+            const off = route.stopOffsets?.[i];
+            if (off == null) continue;
+            for (const dep of deps) {
+              const arr = toMin(dep) + off;
+              if (arr < firstArrive) firstArrive = arr;
+              if (arr > lastArrive) lastArrive = arr;
+            }
+          }
+          if (!isFinite(firstArrive) || !isFinite(lastArrive)) return null;
+          return {
+            start: Math.max(0, firstArrive - 20),
+            end: lastArrive,
+          };
+        }
+
+        const badges = summarizeRouteBadges(stop.routes)
           .map((b) => {
             const r = ROUTE_BY_ID[b.routeId];
-
             let activeNow = false;
-            if (routeRunsOn(r, refDate)) {
-              const deps = getDeparturesForDate(r, refDate);
-              if (deps.length) {
-                const first = toMin(deps[0]);
-                const last = toMin(deps[deps.length - 1]);
-                activeNow = nowMin >= first && nowMin <= last;
-              }
+            let period = null;
+
+            const mutual = MUTUAL_GROUPS.find((g) => g.includes(b.routeId));
+            if (mutual) {
+              period = getMutualActivePeriod(mutual, stop.id, refDate);
+              if (period)
+                activeNow = nowMin >= period.start && nowMin <= period.end;
+            } else {
+              period = getRouteActivePeriod(r, stop.id, refDate);
+              if (period)
+                activeNow = nowMin >= period.start && nowMin <= period.end;
             }
 
             return { ...b, activeNow };
           })
-
           .filter((b) => b.activeNow || !HIDE_INACTIVE_BADGES);
 
         const pills = badges
           .map((b) => {
-            const bg = b.activeNow ? b.color : '#6b7280'; // 不在營運時段 => 灰色
+            const bg = b.activeNow ? b.color : '#6b7280';
             return `<span class="pill" style="background:${bg};">${b.label}</span>`;
           })
           .join('');
@@ -2494,6 +2529,7 @@
           <div class="badge-row">${pills}</div>
         `;
       }
+
 
       function initMarkers() {
         STOPS.forEach((stop) => {
