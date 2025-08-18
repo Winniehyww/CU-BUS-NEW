@@ -2610,6 +2610,17 @@
       }
 
       function markerHtml(stop) {
+        if (stop.id === 'S1') {
+        return `
+          <svg class="pin-svg" viewBox="0 0 56 64" aria-hidden="true">
+            <circle class="pin-fill" cx="28" cy="45" r="7"></circle>
+            <path class="pin-fill" d="M22 54 L34 54 L28 64 Z"></path>
+          </svg>
+          <div class="badge-row">
+            <span class="pill" style="background:#3672e7;">Terminal</span>
+          </div>
+        `;
+      }
         const refDate = parseDT(nowControl);
         const nowMin = minutesInDay(refDate);
 
@@ -2801,7 +2812,7 @@
           } else {
             setRefreshBtnRotating(false);
           }
-        }, 30000);
+        }, 10000);
       }
       startAutoRefresh();
       setRefreshBtnRotating(true);
@@ -2818,7 +2829,7 @@
       function pathPreviewForStopAtIndex(route, stopIndex) {
         const stops = route.stops;
         const N = stops.length;
-        if (stopIndex >= N - 1) return '終點站'; // already at terminal
+        if (stopIndex >= N - 1) return '<b>終點站</b>'; // already at terminal
 
         const next1 = stops[stopIndex + 1];
         const finalstop = stops[N - 1];
@@ -2947,7 +2958,17 @@
           let rightText;
           if (SHOW_COUNTDOWN) {
             const delta = Math.max(0, u.time - nowMin);
-            rightText = delta < 2 ? 'Arriving' : `${delta} min`;
+            // 特殊站点/路线用 Departing
+            let useDeparting = false;
+            if (
+              selectedStopId === 'T1' ||
+              selectedStopId === 'T3' ||
+              (selectedStopId === 'T2' && (u.routeId === '2' || u.routeId === '2*')) ||
+              (selectedStopId === 'X3' && u.routeId === '5')
+            ) {
+              useDeparting = true;
+            }
+            rightText = delta < 2 ? (useDeparting ? 'Departing' : 'Arriving') : `${delta} min`;
           } else {
             rightText = toHHMM(u.time);
           }
@@ -3102,6 +3123,10 @@
             })
           );
         });
+        if (selectedStopId && markerByStop[selectedStopId]) {
+          const el = markerByStop[selectedStopId].getElement();
+          if (el) el.classList.add('selected');
+        }
       }
 
       function applyDrawerExpanded() {
