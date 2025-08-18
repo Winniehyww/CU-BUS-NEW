@@ -117,6 +117,7 @@
         display: flex;
         gap: 6px;
         align-items: center;
+        justify-content: flex-end;
       }
       .up-when label {
         white-space: nowrap;
@@ -844,7 +845,7 @@
           <!-- NEW: Date+Time control for upcoming preview -->
           <div class="up-when">
             <label for="nowControl" class="sr-muted" style="font-size: 12px"
-              >查詢時間</label
+              >查詢<br>時間</label
             >
             <input id="nowControl" type="datetime-local" />
             <button
@@ -862,7 +863,7 @@
               class="icon-btn tool-btn"
               id="timeModeBtn"
               title="切換顯示（時刻 / 倒數）"
-              style="margin-left: auto; margin-right: 10px; height: 33px"
+              style="margin-left: auto; height: 33px"
             >
               <span id="timeModeLabel" style="font-weight: 800; font-size: 12px"
                 >hh:mm</span
