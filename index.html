@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Campus Bus — Map & Timetable</title>
+    <title>CU Bus New — Map & Timetable</title>
     <!-- Leaflet -->
     <link
       rel="stylesheet"
@@ -29,7 +29,7 @@
         --shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
         --pin-fill: #fff;
         --pin-stroke: #111;
-        --pin-selected: rgba(231, 158, 62, 0.8);
+        --pin-selected: rgba(127, 193, 244, 0.9);
       }
       * {
         box-sizing: border-box;
@@ -549,6 +549,30 @@
         pointer-events: none; /* clicking still selects the stop */
       }
 
+      /* ...existing code... */
+      .day-flag-label {
+        display: inline-flex;
+        padding: 4px 8px;
+        margin-left: 8px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 13px;
+        background: var(--card);
+        color: var(--fg);
+        border: 1px solid rgba(255,255,255,0.12);
+        text-align: center;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow);
+        vertical-align: middle;
+        color: inherit;
+      }
+      .day-flag-label.ph { color: #BF665B !important; }
+      .day-flag-label.teaching { color: currentColor !important; }
+      .day-flag-label.non { color: currentColor !important; }
+
+
+
       /* Upcoming direction line: no-wrap + ellipsis */
       .route-dir {
         display: flex;
@@ -830,6 +854,7 @@
                 <path d="M4.06189 13C4.02104 12.6724 4 12.3387 4 12C4 7.58172 7.58172 4 12 4C14.5006 4 16.7332 5.14727 18.2002 6.94416M19.9381 11C19.979 11.3276 20 11.6613 20 12C20 16.4183 16.4183 20 12 20C9.61061 20 7.46589 18.9525 6 17.2916M9 17H6V17.2916M18.2002 4V6.94416M18.2002 6.94416V6.99993L15.2002 7M6 20V17.2916" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
+            <div id="dayFlagLabel" style="margin-left:8px;font-weight:700;font-size:13px;color:#e9edf1;min-width:80px;text-align:left"></div>
             <button
               class="icon-btn tool-btn"
               id="timeModeBtn"
@@ -1403,10 +1428,28 @@
         return PUBLIC_HOLIDAYS.includes(ymd);
       }
 
+      function updateDayFlagLabel() {
+        const label = document.getElementById('dayFlagLabel');
+        if (!label) return;
+        label.className = 'day-flag-label';
+        if (IS_PUBLIC_HOLIDAY) {
+          label.textContent = '公衆假期';
+          label.classList.add('ph');
+        } else if (IS_TEACHING_DAY) {
+          label.textContent = '教學日';
+          label.classList.add('teaching');
+        } else {
+          label.textContent = '非教學日';
+          label.classList.add('non');
+        }
+      }
+
+
       function updateDayFlagsByDate(date) {
         IS_TEACHING_DAY = isTeachingDay(date);
         IS_NON_TEACHING_DAY = !IS_TEACHING_DAY;
         IS_PUBLIC_HOLIDAY = isPublicHoliday(date);
+        updateDayFlagLabel();
       }
 
       let IS_PUBLIC_HOLIDAY = false; // true = today is a public holiday
