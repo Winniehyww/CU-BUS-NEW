@@ -1275,7 +1275,6 @@
             if (nearest) {
               selectStop(nearest.id);
             }
-            map.setView([latitude , longitude], 17);
 
             // 开始追踪
             trackingWatchId = navigator.geolocation.watchPosition(
@@ -1300,11 +1299,11 @@
                   }),
                 }).addTo(map);
 
-                const nearest = getNearestStop(latitude, longitude);
-                if (nearest) {
-                  selectStop(nearest.id);
-                }
-                map.setView([latitude, longitude], 17);
+                // const nearest = getNearestStop(latitude, longitude);
+                // if (nearest) {
+                //   selectStop(nearest.id);
+                // }
+                // map.setView([latitude, longitude], 17);
               },
               (err) => {
                 locateBtn.disabled = false;
