@@ -23,6 +23,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    
     <style>
       :root {
         --bg: #0b0c10;
@@ -2755,6 +2756,31 @@
       let autoRefreshTimer = null;
       let autoRefreshing = true; 
       let lastManualChange = Date.now();
+      let ROUTE_GEO = {};
+
+      fetch('/CU-BUS-NEW/bus_routes_geo.json')
+        .then(res => {
+          if (!res.ok) throw new Error('Network response was not ok');
+          return res.json();
+        })
+        .then(data => {
+          ROUTE_GEO = data;
+          if (selectedRouteId) {
+            selectRoute(selectedRouteId);
+          }
+        })
+        .catch(err => {
+          console.log('Failed to load bus_routes_geo.json:', err);
+        });
+
+      function plotRouteOnRoad(routeId) {
+        if (!ROUTE_GEO[routeId]) return;
+        if (activeRouteLayer) map.removeLayer(activeRouteLayer);
+        activeRouteLayer = L.geoJSON(ROUTE_GEO[routeId], {
+          style: { color: routeColor(routeId), weight: 5, opacity: 0.85 }
+        }).addTo(map);
+        // map.fitBounds(activeRouteLayer.getBounds().pad(0.1));
+      }
 
       function refreshNowTimeAndSearch() {
         nowControl.value = nowLocalInputValue();
@@ -3030,6 +3056,48 @@
         }
       }
 
+      function selectRoute(routeId) {
+        selectedRouteId = routeId;
+        const r = ROUTE_BY_ID[routeId];
+        if (!r) return;
+        drawer.style.display = 'block';
+        drawerPill.textContent = r.id;
+        drawerPill.classList.remove('icon-mode');
+        drawerPill.style.background = r.color;
+        drawerTitle.textContent = `${r.name}`;
+
+        // route view content
+        drawerDesc.innerHTML =
+          `<div><strong>服務時間：</strong>${r.service || '—'}</div>` +
+          `<div class="sr-muted" style="margin-top:4px">${daysLabel(r)}</div>` +
+          (r.comment
+            ? `<div class="sr-muted" style="margin-top:4px">${r.comment}</div>`
+            : '');
+
+        drawerList.innerHTML = '';
+        r.stops.forEach((sid, idx) => {
+          const s = STOP_BY_ID[sid];
+          const row = document.createElement('div');
+          row.className = 'route-row';
+          row.innerHTML = `<div class="no">${idx + 1}</div>
+                           <div class="name">${s.name.zh_hant}</div>
+                           <div class="sub">${s.name.en} · ${
+            s.name.zh_hans
+          }</div>`;
+          row.onclick = () => {
+            selectStop(sid);
+            map.panTo([s.lat + 0.00115, s.lng + 0.000526]);
+          };
+          drawerList.appendChild(row);
+        });
+        drawerList.scrollTop = 0;
+        // after building all rows in drawerList...
+        highlightAndScrollSelectedStop();
+        showDrawerMode('route'); // keep drawer in route mode
+        applyDrawerExpanded(); // preserve expanded state
+        plotRouteOnRoad(routeId);
+      }
+
       function selectStop(stopId) {
         const prev = selectedStopId;
         if (prev && markerByStop[prev]) {
@@ -3180,6 +3248,7 @@
         hideDrawerBtn.onclick = () => {
           drawer.style.display = 'none';
           drawerExpanded = false;
+          map.removeLayer(activeRouteLayer)
           // keep current mode; user can reopen by selecting route/plan again
         };
       }
@@ -3254,46 +3323,7 @@
         }
       }
 
-      function selectRoute(routeId) {
-        selectedRouteId = routeId;
-        const r = ROUTE_BY_ID[routeId];
-        if (!r) return;
-        drawer.style.display = 'block';
-        drawerPill.textContent = r.id;
-        drawerPill.classList.remove('icon-mode');
-        drawerPill.style.background = r.color;
-        drawerTitle.textContent = `${r.name}`;
-
-        // route view content
-        drawerDesc.innerHTML =
-          `<div><strong>服務時間：</strong>${r.service || '—'}</div>` +
-          `<div class="sr-muted" style="margin-top:4px">${daysLabel(r)}</div>` +
-          (r.comment
-            ? `<div class="sr-muted" style="margin-top:4px">${r.comment}</div>`
-            : '');
-
-        drawerList.innerHTML = '';
-        r.stops.forEach((sid, idx) => {
-          const s = STOP_BY_ID[sid];
-          const row = document.createElement('div');
-          row.className = 'route-row';
-          row.innerHTML = `<div class="no">${idx + 1}</div>
-                           <div class="name">${s.name.zh_hant}</div>
-                           <div class="sub">${s.name.en} · ${
-            s.name.zh_hans
-          }</div>`;
-          row.onclick = () => {
-            selectStop(sid);
-            map.panTo([s.lat + 0.00115, s.lng + 0.000526]);
-          };
-          drawerList.appendChild(row);
-        });
-        drawerList.scrollTop = 0;
-        // after building all rows in drawerList...
-        highlightAndScrollSelectedStop();
-        showDrawerMode('route'); // keep drawer in route mode
-        applyDrawerExpanded(); // preserve expanded state
-      }
+      
 
       // ========= 6) Search =========
       const searchInput = document.getElementById('searchInput');
