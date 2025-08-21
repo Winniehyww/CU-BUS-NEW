@@ -3212,6 +3212,7 @@
           const r = ROUTE_BY_ID[selectedRouteId];
           drawerTitle.textContent = r ? r.name : '未選擇路線';
           drawerPill.textContent = r ? r.id : '—';
+          drawerPill.classList.remove('icon-mode');
           drawerPill.style.background = r ? r.color : '#6b7280';
         } else {
           drawerTitle.textContent = '未選擇路線';
@@ -4382,6 +4383,12 @@
             <path d="M16 11.5L13.3333 9M16 11.5L13.3333 14M16 11.5L10.6667 11.5C9.77778 11.5 8 12 8 14"></path>
           </svg>
         `;
+
+        if (drawer.style.display === 'none') {
+          drawer.style.display = 'block';
+          drawerExpanded = false;
+          applyDrawerExpanded();
+        }
 
         drawerExpanded = false;
         applyDrawerExpanded();
