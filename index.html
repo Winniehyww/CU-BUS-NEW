@@ -8,7 +8,8 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <meta name="apple-mobile-cu-bus-new" content="CU Bus New" />
+    <meta name="apple-mobile-web-app-title" content="CU Bus New" />
+    <meta name="theme-color" content="#0b0c10" id="themeColorMeta" />
     <link rel="manifest" href="/site.webmanifest" />
     <!-- Leaflet -->
     <link
@@ -4401,6 +4402,11 @@
         if (iconSun) iconSun.style.display = light ? 'none' : '';
         if (iconMoon) iconMoon.style.display = light ? '' : 'none';
         applyMapTheme(true);
+
+        const themeColorMeta = document.getElementById('themeColorMeta');
+        if (themeColorMeta) {
+          themeColorMeta.setAttribute('content', light ? '#f7f8fb' : '#0b0c10');
+        }
       })();
 
       if (themeToggle) {
@@ -4414,6 +4420,11 @@
           if (iconSun) iconSun.style.display = light ? 'none' : '';
           if (iconMoon) iconMoon.style.display = light ? '' : 'none';
           applyMapTheme(true);
+
+          const themeColorMeta = document.getElementById('themeColorMeta');
+          if (themeColorMeta) {
+            themeColorMeta.setAttribute('content', light ? '#f7f8fb' : '#0b0c10');
+          }
         };
       }
 
