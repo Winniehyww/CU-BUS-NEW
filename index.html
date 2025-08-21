@@ -3633,8 +3633,12 @@
       }
 
       function detailsHTML(it) {
-        const depart0 =
-          it.legs[0]?.depart != null ? toHHMM(it.legs[0].depart) : '—';
+        let departInput = departDT && departDT.value ? departDT.value : nowControl.value;
+        let depart0 = '—';
+        if (departInput) {
+          const t = departInput.split('T')[1];
+          depart0 = t ? t : departInput;
+        }
         const arriveN =
           it.legs.at(-1)?.arrive != null ? toHHMM(it.legs.at(-1).arrive) : '—';
 
