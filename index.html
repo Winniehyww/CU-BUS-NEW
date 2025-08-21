@@ -3052,6 +3052,7 @@
               rowEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
           }, 0);
         } else {
+          map.removeLayer(activeRouteLayer);
           drawer.style.display = 'none';
         }
       }
