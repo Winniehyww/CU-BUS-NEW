@@ -825,12 +825,31 @@
           gap: 6px;
           padding: 6px;
         }
+        .topbar > * {
+          width: 100%;          
+          min-width: 0;         
+        }
         .upcoming {
           order: 2;
         }
         .planner-wrap {
+          width: 100%;
           order: 3;
         }
+        .up-when {
+          flex-wrap: wrap;
+          gap: 6px;
+          justify-content: flex-start;
+          align-items: flex-start;
+        }
+        .up-when label,
+        .up-when input,
+        .up-when div {
+          flex: 1 1 auto;
+          min-width: 0;
+          margin-bottom: 4px;
+        }
+        
       }
     </style>
   </head>
