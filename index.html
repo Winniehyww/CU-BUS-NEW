@@ -84,7 +84,7 @@
         right: 0;
         padding: 8px 10px;
         display: grid;
-        grid-template-columns: 420px 720px 2fr;
+        grid-template-columns: 460px 720px 2fr;
         gap: 8px;
         z-index: 1000;
         pointer-events: none;
@@ -3110,8 +3110,9 @@
             s.name.zh_hans
           }</div>`;
           row.onclick = () => {
-            selectStop(sid);
+            selectStop(sid, { fromRouteList: true });
             map.panTo([s.lat + 0.00115, s.lng + 0.000526]);
+            highlightAndScrollSelectedStop(idx);
           };
           drawerList.appendChild(row);
         });
@@ -3123,7 +3124,7 @@
         plotRouteOnRoad(routeId);
       }
 
-      function selectStop(stopId) {
+      function selectStop(stopId, { fromRouteList = false } = {}) {
         const prev = selectedStopId;
         if (prev && markerByStop[prev]) {
           const el = markerByStop[prev].getElement();
@@ -3139,8 +3140,11 @@
         selStopSub.textContent = `${s.name.en} · ${s.name.zh_hans}`;
         updateUpcoming();
         openStopPopup(s);
-        autoShowNextBusForStop(stopId);
-        map.setView([s.lat + 0.00115, s.lng + 0.000526], 17);
+        if (!fromRouteList) {
+          autoShowNextBusForStop(stopId);
+          map.setView([s.lat + 0.00115, s.lng + 0.000526], 17);
+        }
+        highlightAndScrollSelectedStop();
       }
 
       function openStopPopup(stop) {
@@ -3329,7 +3333,7 @@
         return `營運日：週${zh}；公眾假期：${r.publicHoliday ? '有' : '無'}`;
       }
 
-      function highlightAndScrollSelectedStop() {
+      function highlightAndScrollSelectedStop(stopIndex = null) {
         if (drawerMode !== 'route') return;
         const r = ROUTE_BY_ID[selectedRouteId];
         if (!r || !selectedStopId) return;
@@ -3338,16 +3342,20 @@
           .querySelectorAll('.route-row.current-stop')
           .forEach((el) => el.classList.remove('current-stop'));
 
-        const firstIdx = r.stops.findIndex((sid) => sid === selectedStopId);
-        if (firstIdx < 0) return;
+        let targetIdx;
+        if (stopIndex !== null) {
+          targetIdx = stopIndex;
+        } else {
+          targetIdx = r.stops.findIndex((sid) => sid === selectedStopId);
+        }
+        if (targetIdx < 0) return;
 
-        const targetRow = drawerList.children[firstIdx];
+        const targetRow = drawerList.children[targetIdx];
         if (targetRow) {
           targetRow.classList.add('current-stop');
           targetRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
       }
-
       
 
       // ========= 6) Search =========
