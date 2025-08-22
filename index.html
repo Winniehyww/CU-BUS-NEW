@@ -2841,7 +2841,12 @@
 
       if (refreshTimeBtn) {
         refreshTimeBtn.onclick = () => {
-          refreshNowTimeAndSearch();
+          if (autoRefreshing) {
+            autoRefreshing = false;
+            setRefreshBtnRotating(false);
+          } else {
+            refreshNowTimeAndSearch();
+          }
         };
       }
 
