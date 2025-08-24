@@ -423,6 +423,23 @@
         box-shadow: none !important; /* 取代舊的光暈做法 */
       }
 
+      #itinView input[type="datetime-local"] {
+        height: 32px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #0f1220;
+        color: var(--fg);
+        padding: 0 8px;
+        font-size: 13px;
+      }
+
+      :root[data-theme='light'] #itinView input[type="datetime-local"] {
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--fg);
+        border-color: rgba(0, 0, 0, 0.12);
+      }
+   
+
       /* Dark mode: button is white with sun icon (indicates switch to day) */
       :root:not([data-theme='light']) #themeToggle {
         background: #ffffff;
@@ -1220,6 +1237,10 @@
               class="itin-head"
               style="display: none; margin-bottom: 8px"
             ></div>
+            <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+              <label for="itinTimeSelect" style="font-size:12px;font-weight:700;">出發時間</label>
+              <input id="itinTimeSelect" type="datetime-local" style="height:32px;border-radius:8px;padding:0 8px;" />
+            </div>
             <div id="drawerItinList" class="itins"></div>
             <div
               id="drawerItinSteps"
@@ -1889,8 +1910,8 @@
           line: '2',
           stops: ['T2', 'U1', 'U4', 'U5', 'U6', 'D3', 'D2', 'D1', 'S1'],
           stopOffsets: [0, 2, 4, 5, 7, 8, 10, 12, 14],
-          departures: genDeparturesSpecial('07:15', '18:45', 60, {
-            addPatterns: [{ minute: 30, from: '07:15', to: '18:45' }],
+          departures: genDeparturesSpecial('08:15', '18:45', 60, {
+            addPatterns: [{ minute: 30, from: '08:15', to: '18:45' }],
           }),
           service: '07:45-18:45 · 約每 15 分鐘一班',
           comment:
@@ -1906,7 +1927,7 @@
           stops: ['T2', 'U1', 'U2', 'U4', 'U5', 'U6', 'D3', 'D2', 'D1', 'S1'],
           stopOffsets: [0, 2, 4, 6, 7, 9, 11, 13, 16, 18],
           departures: genDeparturesSpecial('08:00', '18:45', 60, {
-            addPatterns: [{ minute: 45, from: '07:15', to: '18:45' }],
+            addPatterns: [{ minute: 45, from: '07:45', to: '18:45' }],
           }),
           service: '07:45-18:45 · 約每 15 分鐘一班',
           comment:
@@ -3317,6 +3338,10 @@
           drawerPill.textContent = '—';
           drawerPill.style.background = '#6b7280';
         }
+
+        plannerModal.classList.add('active');
+        planResult.textContent = '';
+        departDT.value = itinTimeSelect && itinTimeSelect.value ? itinTimeSelect.value : nowLocalInputValue();
       };
 
       function daysLabel(r) {
@@ -4050,6 +4075,8 @@
 
       // Ranking: put direct first unless a transfer is strictly faster
       const SAVINGS_THRESHOLD_MIN = 4;
+      const itinTimeSelect = document.getElementById('itinTimeSelect');
+
 
       function rankPlans(plans) {
         const finite = plans.filter((p) => isFinite(p.totalMinutes));
@@ -4410,6 +4437,11 @@
           return;
         }
 
+        departDT.value = departDT.value || nowLocalInputValue();
+        if (itinTimeSelect) {
+          itinTimeSelect.value = departDT.value;
+        }
+
         const depDate = parseDT(departDT);
         const graph = buildGraphFor(depDate);
         const itinSummary = document.getElementById('itinSummary');
@@ -4464,6 +4496,32 @@
 
         plannerModal.classList.remove('active');
       };
+
+      if (itinTimeSelect) {
+        itinTimeSelect.addEventListener('change', () => {
+          if (!lastPlanFromId || !lastPlanToId) return;
+          const depDate = itinTimeSelect.value ? new Date(itinTimeSelect.value) : new Date();
+          departDT.value = itinTimeSelect.value; // 同步 planner modal 的時間
+          const graph = buildGraphFor(depDate);
+          const itinSummary = document.getElementById('itinSummary');
+          if (itinSummary) {
+            itinSummary.style.display = '';
+            itinSummary.innerHTML = `
+              <div class="itin-title">${zhStopLabel(lastPlanFromId)} → ${zhStopLabel(lastPlanToId)}</div>
+            `;
+          }
+          let best = findZeroTransferPlans(lastPlanFromId, lastPlanToId, depDate, graph);
+          if (best.length === 0) {
+            planResult.textContent = '找不到可行路線（60 分鐘內）';
+            currentItins = [];
+            renderItineraries();
+            return;
+          }
+          currentItins = best;
+          renderItineraries();
+          drawerItinList.scrollTop = 0;
+        });
+      }
 
       // ========= Theme toggle (3d) =========
       (function () {
