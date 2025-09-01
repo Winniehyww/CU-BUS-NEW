@@ -151,7 +151,7 @@
         .up-when input[type="datetime-local"] {
           min-width: 140px;
           width: 18vw;
-          font-size: clamp(11px, 2vw, 13px);
+          font-size: clamp(11px, 2vw, 12px);
           transition: width 0.2s, font-size 0.2s;
         }
       .up-when input {
@@ -898,7 +898,7 @@
         .up-when input[type="datetime-local"] {
           min-width: 140px;
           width: 18vw;
-          font-size: clamp(11px, 2vw, 13px);
+          font-size: clamp(11px, 2vw, 12px);
           transition: width 0.2s, font-size 0.2s;
         }
         .up-when div {
@@ -936,22 +936,22 @@
               class="icon-btn tool-btn"
               id="refreshTimeBtn"
               title="刷新為現在時間"
-              style="margin-left: auto; height: 33px; width: 33px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"
+              style="margin-left: 2px; height: 33px; width: 33px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"
             >
               <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none">
                 <path d="M4.06189 13C4.02104 12.6724 4 12.3387 4 12C4 7.58172 7.58172 4 12 4C14.5006 4 16.7332 5.14727 18.2002 6.94416M19.9381 11C19.979 11.3276 20 11.6613 20 12C20 16.4183 16.4183 20 12 20C9.61061 20 7.46589 18.9525 6 17.2916M9 17H6V17.2916M18.2002 4V6.94416M18.2002 6.94416V6.99993L15.2002 7M6 20V17.2916" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
             <div id="dayFlagLabel"
-              style="height:33px;
+              style="height:32px;
                     border-radius:10px;
                     border:1px solid rgba(255,255,255,0.12);
                     margin-left:auto;
+                    max-width: 80px;
                     font-weight:700;
                     font-size:13px;
                     text-align:center;
-                    display:flex;
-                    align-items:center;
+                    align-items:right;
                     justify-content:center;
                     background:var(--card);
                     color:var(--fg);"
@@ -3441,7 +3441,29 @@
       const searchResults = document.getElementById('searchResults');
       function querySearch(q) {
         q = q.trim().toLowerCase();
-        if (!q) return [];
+        if (!q) {
+        const defaultRoutes = ['1A', '2', '3', '4', '8', 'N'];
+        const defaultStops = ['T1', 'T2', 'D2'];
+        const routeMatches = defaultRoutes.map((id) => {
+          const r = ROUTE_BY_ID[id];
+          return {
+            type: 'route',
+            id: r.id,
+            label: `路線 ${r.id}`,
+            sub: r.name,
+          };
+        });
+        const stopMatches = defaultStops.map((id) => {
+          const s = STOP_BY_ID[id];
+          return {
+            type: 'stop',
+            id: s.id,
+            label: s.name.zh_hant,
+            sub: `${s.name.en} · ${s.name.zh_hans}`,
+          };
+        });
+        return routeMatches.concat(stopMatches);
+      }
         const stopMatches = STOPS.filter(
           (s) =>
             s.name.zh_hant.includes(q) ||
@@ -3491,6 +3513,9 @@
       searchInput.addEventListener('input', () =>
         renderSearchResults(querySearch(searchInput.value))
       );
+      searchInput.addEventListener('focus', () => {
+        renderSearchResults(querySearch(''));
+      });
       document.addEventListener('click', (e) => {
         if (!searchResults.contains(e.target) && e.target !== searchInput) {
           searchResults.classList.remove('active');
@@ -3523,13 +3548,12 @@
         box.style.zIndex = '1002';
         input.parentElement.style.position = 'relative';
         input.parentElement.appendChild(box);
-        input.addEventListener('input', () => {
-          const items = STOPS.filter(
-            (s) =>
-              s.name.zh_hant.includes(input.value) ||
-              s.name.en.toLowerCase().includes(input.value.toLowerCase()) ||
-              s.name.zh_hans.includes(input.value)
-          ).slice(0, 10);
+
+        const defaultStops = [
+          'T1', 'T2', 'T3', 'D2', 'D3', 'U6', 'D1', 'B1', 'B2', 'B3', 'B5'
+        ];
+
+        function render(items) {
           box.innerHTML = '';
           if (items.length === 0) {
             box.classList.remove('active');
@@ -3538,7 +3562,8 @@
           for (const s of items) {
             const row = document.createElement('div');
             row.className = 'sr-item';
-            row.innerHTML = `<div class="pill" style="background:#6b7280;">站</div><div>${s.name.zh_hant}<div class="sr-muted">${s.name.en} · ${s.name.zh_hans}</div></div>`;
+            row.innerHTML = `<div class="pill" style="background:#6b7280;">站</div>
+              <div>${s.name.zh_hant}<div class="sr-muted">${s.name.en} · ${s.name.zh_hans}</div></div>`;
             row.onclick = () => {
               input.value = s.name.zh_hant;
               input.dataset.stopId = s.id;
@@ -3547,13 +3572,35 @@
             box.appendChild(row);
           }
           box.classList.add('active');
+        }
+
+        input.addEventListener('input', () => {
+          const val = input.value.trim();
+          let items;
+          if (!val) {
+            items = defaultStops.map(id => STOP_BY_ID[id]).filter(Boolean);
+          } else {
+            items = STOPS.filter(
+              (s) =>
+                s.name.zh_hant.includes(val) ||
+                s.name.en.toLowerCase().includes(val.toLowerCase()) ||
+                s.name.zh_hans.includes(val)
+            ).slice(0, 10);
+          }
+          render(items);
         });
+
+        input.addEventListener('focus', () => {
+          input.dispatchEvent(new Event('input'));
+        });
+
         document.addEventListener('click', (e) => {
           if (!box.contains(e.target) && e.target !== input) {
             box.classList.remove('active');
           }
         });
       }
+
       attachAutocomplete(startInput);
       attachAutocomplete(endInput);
 
