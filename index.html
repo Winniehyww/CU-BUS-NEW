@@ -897,15 +897,15 @@
 
           <!-- NEW: Date+Time control for upcoming preview -->
           <div class="up-when">
-            <label for="nowControl" class="sr-muted" style="font-size: 12px"
-              >查詢<br>時間</label
-            >
-            <input id="nowControl" type="datetime-local" />
+            <div style="display: flex; align-items: left; flex-wrap: wrap;">
+              <label for="nowControl" class="sr-muted" style="font-size: 12px;">查詢<br>時間</label>
+              <input id="nowControl" type="datetime-local" style="max-width: 170px;" />
+            </div>
             <button
               class="icon-btn tool-btn"
               id="refreshTimeBtn"
               title="刷新為現在時間"
-              style="margin-left: 6px; height: 33px; width: 33px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"
+              style="margin-left: auto; height: 33px; width: 33px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"
             >
               <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none">
                 <path d="M4.06189 13C4.02104 12.6724 4 12.3387 4 12C4 7.58172 7.58172 4 12 4C14.5006 4 16.7332 5.14727 18.2002 6.94416M19.9381 11C19.979 11.3276 20 11.6613 20 12C20 16.4183 16.4183 20 12 20C9.61061 20 7.46589 18.9525 6 17.2916M9 17H6V17.2916M18.2002 4V6.94416M18.2002 6.94416V6.99993L15.2002 7M6 20V17.2916" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
