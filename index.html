@@ -137,8 +137,23 @@
         justify-content: flex-end;
       }
       .up-when label {
-        white-space: nowrap;
-      }
+          margin: 0;
+          padding: 0;
+          line-height: 1.1;
+          font-size: 12px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: flex-start;
+          width: auto;
+          min-width: unset;
+        }
+        .up-when input[type="datetime-local"] {
+          min-width: 140px;
+          width: 18vw;
+          font-size: clamp(11px, 2vw, 13px);
+          transition: width 0.2s, font-size 0.2s;
+        }
       .up-when input {
         height: 32px;
         border-radius: 10px;
@@ -868,8 +883,24 @@
           justify-content: flex-start;
           align-items: flex-start;
         }
-        .up-when label,
-        .up-when input,
+        .up-when label {
+          margin: 0;
+          padding: 0;
+          line-height: 1.1;
+          font-size: 12px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: flex-start;
+          width: auto;
+          min-width: unset;
+        }
+        .up-when input[type="datetime-local"] {
+          min-width: 140px;
+          width: 18vw;
+          font-size: clamp(11px, 2vw, 13px);
+          transition: width 0.2s, font-size 0.2s;
+        }
         .up-when div {
           flex: 1 1 auto;
           min-width: 0;
