@@ -918,12 +918,25 @@
       <!-- Top Bar -->
       <div class="topbar">
         <!-- Selected Stop + Upcoming -->
-        <div class="card pad upcoming" id="upcomingCard">
-          <div>
-            <div class="stop-title">
-              <span id="selStopName">未選擇站點</span>
+        <div class="card pad upcoming" id="upcomingCard" style="position:relative;">
+          <div class="upcoming-header" style="display:flex; align-items:center; justify-content:flex-end; min-height:40px;">
+            <div style="flex:1;">
+              <div class="stop-title">
+                <span id="selStopName">未選擇站點</span>
+              </div>
+              <div class="stop-subtitle" id="selStopSub">—</div>
             </div>
-            <div class="stop-subtitle" id="selStopSub">—</div>
+            <div id="nextBusBrief" style="display:none; margin-right:8px;"></div>
+            <button
+              class="icon-btn tool-btn"
+              id="upWhenToggleBtn"
+              title="收合/展開"
+              style="height:32px; width:32px;"
+            >
+              <svg id="upWhenToggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <polyline points="6 15 12 9 18 15" stroke="currentColor" stroke-width="2" fill="none"/>
+              </svg>
+            </button>
           </div>
 
           <!-- NEW: Date+Time control for upcoming preview -->
@@ -2846,6 +2859,11 @@
       const refreshTimeBtn = document.getElementById('refreshTimeBtn');
       nowControl.value = nowLocalInputValue();
 
+      let UP_WHEN_COLLAPSED = false;
+      const upWhenToggleBtn = document.getElementById('upWhenToggleBtn');
+      const upWhenToggleIcon = document.getElementById('upWhenToggleIcon');
+      const nextBusBrief = document.getElementById('nextBusBrief');
+
       let autoRefreshTimer = null;
       let autoRefreshing = true; 
       let lastManualChange = Date.now();
@@ -2865,6 +2883,66 @@
         .catch(err => {
           console.log('Failed to load bus_routes_geo.json:', err);
         });
+
+        function setUpWhenCollapsed(collapsed) {
+          UP_WHEN_COLLAPSED = collapsed;
+          if (collapsed) {
+            upcomingList.style.display = 'none';
+            nextBusBrief.style.display = '';
+            upWhenToggleIcon.innerHTML = '<polyline points="6 9 12 15 18 9" stroke="currentColor" stroke-width="2" fill="none"/>';
+            renderNextBusBrief();
+          } else {
+            upcomingList.style.display = '';
+            nextBusBrief.style.display = 'none';
+            upWhenToggleIcon.innerHTML = '<polyline points="6 15 12 9 18 15" stroke="currentColor" stroke-width="2" fill="none"/>';
+          }
+        }
+
+        if (upWhenToggleBtn) {
+          upWhenToggleBtn.onclick = () => setUpWhenCollapsed(!UP_WHEN_COLLAPSED);
+        }
+
+        function renderNextBusBrief() {
+          if (!selectedStopId) {
+            nextBusBrief.innerHTML = '<div class="sr-muted">請在地圖點選站點</div>';
+            return;
+          }
+          const refDate = parseDT(nowControl);
+          const stop = STOP_BY_ID[selectedStopId];
+          let best = null;
+          for (const rId of stop.routes) {
+            const r = ROUTE_BY_ID[rId];
+            const arr = nextArrivalsForStop(r, selectedStopId, refDate, 1);
+            if (arr.length) {
+              const a = arr[0];
+              if (!best || a.time < best.time) best = a;
+            }
+          }
+          if (!best) {
+            nextBusBrief.innerHTML = '<div class="sr-muted">此時間無班次</div>';
+            return;
+          }
+          const r = ROUTE_BY_ID[best.routeId];
+          const pill = `<span class="pill" style="background:${r.color};cursor:pointer;" data-route="${best.routeId}">${best.routeId}</span>`;
+          const rightText = SHOW_COUNTDOWN
+            ? (Math.max(0, best.time - minutesInDay(refDate)) < 2 ? 'Arriving' : `${Math.max(0, best.time - minutesInDay(refDate))} min`)
+            : toHHMM(best.time);
+          nextBusBrief.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-weight:600; font-size:11px">下班車:</span>
+              ${pill}
+              <span class="time" style="font-weight:700;">${rightText}</span>
+            </div>
+          `;
+          // 让 pill 可点击
+          const pillEl = nextBusBrief.querySelector('[data-route]');
+          if (pillEl) {
+            pillEl.onclick = (e) => {
+              e.stopPropagation();
+              selectRoute(best.routeId);
+            };
+          }
+        }
 
       function plotRouteOnRoad(routeId) {
         if (!ROUTE_GEO[routeId]) return;
@@ -3054,6 +3132,10 @@
       }
 
       function updateUpcoming() {
+        if (UP_WHEN_COLLAPSED) {
+          renderNextBusBrief();
+          return;
+        }
         if (!selectedStopId) {
           upcomingList.innerHTML =
             '<div class="sr-muted">請在地圖點選站點</div>';
@@ -4699,6 +4781,7 @@
       initMarkers(); // <-- build markers now that inputs exist
       refreshAllMarkers(); // first paint with correct badges
       selectStop('T1');
+      setUpWhenCollapsed(false);
     </script>
   </body>
 </html>
