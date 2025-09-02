@@ -4431,7 +4431,7 @@
                 const totalWalk = (legWalk1?.walk || 0) + (legWalk2?.walk || 0);
                 const totalMinutes = totalWait + totalRide + totalWalk;
 
-                if (totalMinutes <= MAX_MINUTES) {
+                if (totalMinutes <= MAX_MINUTES && totalWalk <= 12) {
                   plans.push({
                     legs,
                     transfers: 0, // ✅ walk+bus still counts as 0 transfer
@@ -4443,6 +4443,121 @@
                     nodes: [s, ...nodes, t],
                     skip: false,
                   });
+                }
+              }
+            }
+          }
+        }
+
+        // --- C) 1-transfer bus plans (最多一次换乘，步行不算换乘) ---
+        for (const vs of S_s) {
+          const preWalk = vs === s ? 0 : walkMinutesAB(s, vs);
+          if (!isFinite(preWalk)) continue;
+
+          for (const { routeId: r1id, idx: i } of STOP_TO_ROUTES.get(vs) || []) {
+            const r1 = ROUTE_BY_ID[r1id];
+            if (!r1 || !routeRunsOn(r1, baseDate)) continue;
+
+            // 只考虑下游站点作为换乘点
+            for (let k = i + 1; k < r1.stops.length; k++) {
+              const u = r1.stops[k];
+
+              for (const { routeId: r2id, idx: uPos } of STOP_TO_ROUTES.get(u) || []) {
+                if (r2id === r1id) continue; // 必须换到不同线路
+                const r2 = ROUTE_BY_ID[r2id];
+                if (!r2 || !routeRunsOn(r2, baseDate)) continue;
+
+                for (const vt of S_t) {
+                  const postWalk = vt === t ? 0 : walkMinutesAB(vt, t);
+                  if (!isFinite(postWalk) && vt !== t) continue;
+
+                  // vt 必须在 r2 的 u 后面
+                  const hitsAtT = (STOP_TO_ROUTES.get(vt) || []).filter(
+                    (x) => x.routeId === r2id && x.idx > uPos
+                  );
+                  for (const { idx: j } of hitsAtT) {
+                    // Leg 1: pre-walk
+                    const legWalk1 = preWalk
+                      ? computeLegTiming(
+                          'WALK',
+                          s,
+                          vs,
+                          baseDate,
+                          startMin0,
+                          preWalk
+                        )
+                      : null;
+                    const startMin1 = preWalk ? legWalk1.arrive : startMin0;
+
+                    // Leg 2: bus1
+                    const legBus1 = computeLegTiming(
+                      r1id,
+                      vs,
+                      u,
+                      baseDate,
+                      startMin1
+                    );
+                    if (legBus1.unavailable) continue;
+
+                    // Leg 3: bus2
+                    const legBus2 = computeLegTiming(
+                      r2id,
+                      u,
+                      vt,
+                      baseDate,
+                      legBus1.arrive
+                    );
+                    if (legBus2.unavailable) continue;
+
+                    // Leg 4: post-walk
+                    const legWalk2 = postWalk
+                      ? computeLegTiming(
+                          'WALK',
+                          vt,
+                          t,
+                          baseDate,
+                          legBus2.arrive,
+                          postWalk
+                        )
+                      : null;
+
+                    const legs = [];
+                    if (legWalk1)
+                      legs.push({ ...legWalk1, route: 'WALK', from: s, to: vs });
+                    legs.push({ ...legBus1, route: r1id, from: vs, to: u });
+                    legs.push({ ...legBus2, route: r2id, from: u, to: vt });
+                    if (legWalk2)
+                      legs.push({ ...legWalk2, route: 'WALK', from: vt, to: t });
+
+                    const nodes1 = ROUTE_BY_ID[r1id].stops.slice(i, k + 1);
+                    const nodes2 = ROUTE_BY_ID[r2id].stops.slice(uPos, j + 1);
+                    const nodes = [s, ...nodes1, ...nodes2.slice(1), t];
+                    const totalDist = nodes
+                      .slice(0, -1)
+                      .reduce(
+                        (d, sid, m) => d + geoDistanceLeg(nodes[m], nodes[m + 1]),
+                        0
+                      );
+
+                    const totalWait = legBus1.wait + legBus2.wait;
+                    const totalRide = legBus1.ride + legBus2.ride;
+                    const totalWalk = (legWalk1?.walk || 0) + (legWalk2?.walk || 0);
+                    const totalMinutes = totalWait + totalRide + totalWalk;
+
+                    if (totalMinutes <= MAX_MINUTES && totalWalk <= 10) {
+                      plans.push({
+                        legs,
+                        transfers: 1, // 只计换乘一次
+                        totalMinutes,
+                        totalWait,
+                        totalRide,
+                        totalWalk,
+                        totalDist,
+                        nodes,
+                        skip: false,
+                      });
+                    }
+                  }
                 }
               }
             }
@@ -4492,7 +4607,7 @@
             return 1; // B first (direct bus)
           }
 
-          // Final tie-breakers
+          if (A.transfers !== B.transfers) return A.transfers - B.transfers;
           if (A.totalMinutes !== B.totalMinutes)
             return A.totalMinutes - B.totalMinutes;
           if (A.totalWait !== B.totalWait) return A.totalWait - B.totalWait;
@@ -4502,6 +4617,7 @@
 
         return uniq.slice(0, LIMIT);
       }
+
 
       // Main: compute up to 3 best plans
       function findBestPlans(s, t, baseDate, GRAPH) {
