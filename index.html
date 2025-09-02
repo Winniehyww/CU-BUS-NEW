@@ -2587,9 +2587,9 @@
         ),
       };
       baseLayers['Normal'].addTo(map);
-      L.control
-        .layers(baseLayers, {}, { position: 'bottomleft', collapsed: true })
-        .addTo(map);
+      // L.control
+      //   .layers(baseLayers, {}, { position: 'bottomleft', collapsed: true })
+      //   .addTo(map);
       let currentBase = baseLayers['Normal']; // already added above
       map.on('baselayerchange', (e) => {
         currentBase = e.layer;
