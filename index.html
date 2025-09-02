@@ -799,6 +799,19 @@
         display: block; /* avoid inline baseline gap */
       }
 
+      .drawer-collapsed .drawer-head {
+        border-bottom: none !important;
+      }
+
+      .drawer-collapsed #drawerDesc {
+        display: none;
+        margin-bottom: 0 !important;
+      }
+      .drawer-collapsed .drawer-content {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+      }
+
       /* When collapsed in itinerary mode: show only the first card; allow scroll */
       .drawer-collapsed #drawerItinSteps {
         display: none;
@@ -858,6 +871,9 @@
       }
       :root[data-theme='dark'] .leaflet-popup-tip {
         background: rgba(46, 49, 56, 0.98);
+      }
+      .leaflet-bottom.leaflet-right .leaflet-control-zoom {
+        bottom: 60px !important;
       }
 
       @media (max-width: 960px) {
@@ -3393,6 +3409,12 @@
 
         const isItin = drawerMode === 'itin';
         drawer.classList.toggle('overlay', isItin && drawerExpanded);
+
+        if (!drawerExpanded && drawerDesc) {
+          drawerDesc.style.display = 'none';
+        } else if (drawerDesc) {
+          drawerDesc.style.display = '';
+        }
 
         // Buttons visibility
         if (!isItin) {
