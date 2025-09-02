@@ -4587,32 +4587,41 @@
         );
 
         uniq.sort((A, B) => {
-          const Awalk = isWalkOnly(A),
-            Bwalk = isWalkOnly(B);
+          // Direct WALK first
+          const isWalkOnly = (p) => p.legs.length === 1 && p.legs[0].route === 'WALK';
+          const isBusOnly = (p) => p.legs.length === 1 && p.legs[0].route !== 'WALK';
+          const isBusPlusWalk = (p) => !isWalkOnly(p) && !isBusOnly(p);
+
+          const Awalk = isWalkOnly(A), Bwalk = isWalkOnly(B);
           if (Awalk !== Bwalk) return Awalk ? -1 : 1;
 
-          const AbusOnly = isBusOnly(A),
-            BbusOnly = isBusOnly(B);
-          const AbusWalk = isBusPlusWalk(A),
-            BbusWalk = isBusPlusWalk(B);
+          // Direct BUS vs BUS+WALK/transfer, only prefer if saves more than 4 minutes
+          const bestBusOnly = uniq.reduce(
+            (m, p) => (isBusOnly(p) && p.totalMinutes < m ? p.totalMinutes : m),
+            Infinity
+          );
+          const AbusOnly = isBusOnly(A), BbusOnly = isBusOnly(B);
+          const AbusWalkOrTransfer = !AbusOnly, BbusWalkOrTransfer = !BbusOnly;
 
-          // Direct bus vs bus+walk with 4-min saving exception
-          if (AbusOnly && BbusWalk) {
-            // Put B before A only if B saves > THRESHOLD vs the best direct bus
-            if (B.totalMinutes <= bestBusOnly - THRESHOLD) return 1; // B first
-            return -1; // A first (direct bus)
+          if (AbusOnly && BbusWalkOrTransfer) {
+            if (B.totalMinutes <= bestBusOnly - THRESHOLD) return 1;
+            return -1;
           }
-          if (AbusWalk && BbusOnly) {
-            if (A.totalMinutes <= bestBusOnly - THRESHOLD) return -1; // A first
-            return 1; // B first (direct bus)
+          if (AbusWalkOrTransfer && BbusOnly) {
+            if (A.totalMinutes <= bestBusOnly - THRESHOLD) return -1;
+            return 1;
           }
 
-          if (A.transfers !== B.transfers) return A.transfers - B.transfers;
+          // Others
           if (A.totalMinutes !== B.totalMinutes)
             return A.totalMinutes - B.totalMinutes;
-          if (A.totalWait !== B.totalWait) return A.totalWait - B.totalWait;
-          if (A.totalWalk !== B.totalWalk) return A.totalWalk - B.totalWalk;
-          return A.totalDist - B.totalDist;
+          if (A.transfers !== B.transfers)
+            return A.transfers - B.transfers;
+          if (A.totalWalk !== B.totalWalk)
+            return A.totalWalk - B.totalWalk;
+          if (A.totalDist !== B.totalDist)
+            return A.totalDist - B.totalDist;
+          return 0;
         });
 
         return uniq.slice(0, LIMIT);
